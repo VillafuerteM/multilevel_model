@@ -1,0 +1,14 @@
+---
+title: "Tadpole Mortality"
+subtitle: "Métodos Analíticos"
+format: pdf
+editor: visual
+authors:
+  - "Mario Medina"
+  - "Eduardo"
+  - "Mariano Villafuerte"
+---
+
+## Abstract
+
+## Problema
