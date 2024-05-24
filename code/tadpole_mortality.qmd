@@ -36,7 +36,7 @@ Este enfoque modela matemáticamente las interacciones complejas y ofrece nuevas
 
 ## Problema
 
-El data set cuenta con
+El conjunto de datos cuenta con información de 48 tanques clasificados en pequeños, medianos y grandes, dependiendo de la densidad de renacuajos en cada uno. Además, disponemos de datos sobre la supervivencia y la tasa de supervivencia en cada tanque. El modelo jerárquico que proponemos pretende capturar estas complejas interacciones entre la densidad, la tasa de supervivencia y otros factores clave para proporcionar una comprensión más profunda de las estrategias adaptativas de las ranas frente a las amenazas de los depredadores.
 
 ```{r}
 #| code-fold: true
@@ -77,16 +77,21 @@ mean_propsurv <- mean(df$propsurv)
 # Create the scatterplot with annotations
 p <- ggplot(df, aes(x = index, y = propsurv)) +
   geom_point() +
-  geom_hline(yintercept = mean_propsurv, linetype = "dashed", color = "brown") +
-  annotate("text", x = max(df$index) - 23, y = mean_propsurv + 0.05, label = "Promedio de supervivencia en tanques", color = "brown", fontface = "italic", hjust = 0) +  
+  geom_hline(yintercept = mean_propsurv, linetype = "dashed", color = "black") +
+  annotate("text", x = max(df$index) - 23, y = mean_propsurv + 0.05, label = "Promedio de supervivencia en tanques", color = "black", fontface = "italic", hjust = 0) +  
   labs(x = "Tanque", y = "Tasa de Supervivencia") + 
   theme_minimal() +  # Apply minimal theme
   theme(
     axis.title.x = element_text(face = "italic"),
     axis.title.y = element_text(face = "italic")
   ) +
-  scale_x_continuous(breaks = c(8, 24, 40), labels = c("tanques S", "tanques M", "tanques L")) 
+  scale_x_continuous(breaks = c(8, 24, 40), labels = c("1 <= tanques S < 16", "16 <= tanques M < 32", "32 <= tanques L < 48")) +
+  geom_vline(xintercept = 16, color = "brown")+
+  geom_vline(xintercept = 32, color = "brown")+
+  geom_vline(xintercept = 48, color = "brown")
 
 
 p
 ```
+
+Hay mucha variación en estos datos. Parte de la variación proviene del tratamiento experimental, pero mucha también proviene de otras fuentes. Pensemos en cada fila como un “tanque,” un entorno experimental que contiene renacuajos. Hay muchas cosas peculiares de cada tanque que no se miden, y estos factores no medidos crean variación en la supervivencia entre tanques, incluso cuando todas las variables predictoras tienen el mismo valor. Se realizan múltiples observaciones, en este caso los renacuajos, dentro de cada grupo
