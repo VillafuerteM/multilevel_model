@@ -141,7 +141,17 @@ digraph {
 ", width = 150, height = 60)
 ```
 
-Con $T=\textrm{Tanque}$, $D=\textrm{Depredadores}$, $T=\textrm{Tanque}$
+Con
+
+-   $\textrm{T}=\textrm{Tanque}$
+
+-   $\textrm{D}=\textrm{Densidad inicial}$
+
+-   $\textrm{G}=\textrm{}$
+
+-   ${P}=\textrm{Depredadores}$
+
+-   $\textrm{S}$
 
 \newpage
 
