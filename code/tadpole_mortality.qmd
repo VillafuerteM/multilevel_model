@@ -8,7 +8,18 @@ authors:
   - "Mariano Villafuerte - 156057"
 format: 
     html:
+      toc: TRUE
       embed-resources: TRUE
+      theme: flatly
+      lang: es
+      font-size: 1.1em
+      include-in-header: 
+      - text: |
+          <style>
+            body { 
+              line-height: 2; /* Adjust the value as needed */
+            }
+          </style>
 ---
 
 ```{r librerias}
@@ -24,6 +35,7 @@ library(DiagrammeR)
 library(loo)
 library(mvtnorm)
 library(rethinking)
+library(scales)
 library(shape)
 library(tidyverse)
 
@@ -78,24 +90,27 @@ p <- ggplot(df,
   geom_point() +
   geom_hline(yintercept = mean_propsurv, 
              linetype = "dashed", 
-             color = "black") +
+             color = "blue4") +
   annotate("text", 
            x = max(df$index) - 23, 
            y = mean_propsurv + 0.05, 
            label = "Promedio de supervivencia en tanques", 
-           color = "black", fontface = "italic", hjust = 0) +  
+           color = "grey", fontface = "italic", hjust = 0) +  
   labs(x = "Tanque", y = "Tasa de Supervivencia") +
   theme(
     axis.title.x = element_text(face = "italic"),
     axis.title.y = element_text(face = "italic")) +
   scale_x_continuous(breaks = c(8, 24, 40), 
-                     labels = c("1 <= tanques S < 16", 
-                                "16 <= tanques M < 32", 
-                                "32 <= tanques L < 48")) +
-  geom_vline(xintercept = 16, color = "brown")+
-  geom_vline(xintercept = 32, color = "brown")+
-  geom_vline(xintercept = 48, color = "brown")
-
+                     labels = c("1 <= Pequeño < 16", 
+                                "16 <= Mediano < 32", 
+                                "32 <= Grande < 48")) +
+  geom_vline(xintercept = 16, 
+             color = "cyan3")+
+  geom_vline(xintercept = 32, 
+             color = "cyan3")+
+  geom_vline(xintercept = 48, 
+             color = "cyan3") +
+  scale_y_continuous(labels = scales::percent_format())
 
 p
 ```
@@ -123,8 +138,10 @@ digraph {
    G -> S
    P -> S
 }
-", width = 150, height = 40)
+", width = 150, height = 60)
 ```
+
+Con $T=\textrm{Tanque}$, $D=\textrm{Depredadores}$, $T=\textrm{Tanque}$
 
 \newpage
 
