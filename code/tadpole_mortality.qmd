@@ -303,6 +303,10 @@ p
 
 Y podemos observar que las predicciones (puntos azules) se ajustan al promedio de supervivencia en los tanques (línea punteada azul). Vemos que este modelo nos lleva a un subajuste. En gris apreciamos los datos originales.
 
+## Modelo No Agrupado
+
+Otra opción que tenemos es asumir que cada tanque tiene su propia $\alpha$ y que no podemos obtener información para un tanque al observar los otros tanques.
+
 \newpage
 
 ## Anexos {#sec-anexos}
