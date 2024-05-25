@@ -1,14 +1,75 @@
 ---
 title: "Tadpole Mortality"
 subtitle: "Métodos Analíticos"
-format: pdf
 editor: visual
 authors:
-  - "Mario Medina"
-  - "Eduardo"
-  - "Mariano Villafuerte"
+  - "Mario Medina - 156940"
+  - "Eduardo Navarrete - "
+  - "Mariano Villafuerte - 156057"
+format:
+  pdf:
+    include-in-header: 
+      text: |
+        \addtokomafont{disposition}{\rmfamily} 
 ---
 
-## Abstract
+```{r librerias}
+#| echo: FALSE
+#| message: FALSE
+#| warning: FALSE
 
-## Problema
+# librerias ----
+# library(coda)
+# library(dagitty)
+# library(DiagrammeR)
+# library(loo)
+# library(mvtnorm)
+library(rethinking)
+# library(shape)
+library(tidyverse)
+
+# configuracion de ggplot ----
+theme_set(theme_minimal())
+
+# cargamos los datos de reedfrogs ---
+data(reedfrogs)
+```
+
+## Abstract {#sec-abstract}
+
+El objetivo de este documento es mostrar un estudio y solución al problema del capítulo 13 de *Statistical Rethinking* (McElreath, 2ed.) sobre supervivencia de renacuajos (ejemplo 13.1 del libro). En específico, se plantea un modelo modelo jerárquico, la idea es ir narrando y aumentando la complejidad del modelo con la esperanza de entender mejor el contexto de los datos.
+
+## Problema {#sec-problema}
+
+En este estudio, se desea analizar la tasa de supervivencia de los renacuajos ante la presencia o introducción de depredadores.
+
+Para este proyecto, se utiliza el conjunto de datos de *reedfrogs* disponible en la librería de *rethinking*. Las instrucciones para instalar la librería y cargar los datos están disponibles en el Anexo 1: *Rethinking y sus datos*.
+
+## Datos {#sec-datos}
+
+Para este problema contamos inicialmente con 5 variables:
+
+| Variable | Descripción                                   |
+|----------|-----------------------------------------------|
+| density  | Densidad inicial de renacuajos                |
+| pred     | Factor indicador de presencia de depredadores |
+| size     | Factor del tamaño de los renacuajos           |
+| surv     | Número de renacuajos que sobrevivieron        |
+| propsurv | Proporción de supervivencia                   |
+
+\newpage
+
+## Anexos {#sec-anexos}
+
+### Rethinking y sus datos {#sec-rethinking-y-sus-datos}
+
+Para instalar la librería de *rethinking*, se pueden seguir las instrucciones del repositorio de McElreath, disponible en este [link](https://github.com/rmcelreath/rethinking "Repositorio de rethinking").
+
+Una vez instalada la librería y sus dependencias, los datos de *reedfrogs,* basta con correr el siguiente código
+
+```{r anexo1_cargarDatos, eval=FALSE}
+library(rethinking)
+data(reedfrogs)
+```
+
+### 
