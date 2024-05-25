@@ -6,7 +6,9 @@ authors:
   - "Mario Medina - 156940"
   - "José Eduardo Gutierrez - "
   - "Mariano Villafuerte - 156057"
-format: html
+format: 
+    html:
+      embed-resources: TRUE
 ---
 
 ```{r librerias}
