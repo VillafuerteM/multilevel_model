@@ -6,11 +6,7 @@ authors:
   - "Mario Medina - 156940"
   - "José Eduardo Gutierrez - "
   - "Mariano Villafuerte - 156057"
-format:
-  pdf:
-    include-in-header: 
-      text: |
-        \addtokomafont{disposition}{\rmfamily} 
+format: html
 ---
 
 ```{r librerias}
@@ -19,13 +15,14 @@ format:
 #| warning: FALSE
 
 # librerias ----
-# library(coda)
-# library(dagitty)
-# library(DiagrammeR)
-# library(loo)
-# library(mvtnorm)
+library(cmdstanr)
+library(coda)
+library(dagitty)
+library(DiagrammeR)
+library(loo)
+library(mvtnorm)
 library(rethinking)
-# library(shape)
+library(shape)
 library(tidyverse)
 
 # configuracion de ggplot ----
@@ -35,17 +32,17 @@ theme_set(theme_minimal())
 data(reedfrogs)
 ```
 
-## Abstract {#sec-abstract}
-
-El objetivo de este documento es mostrar un estudio y solución al problema del capítulo 13 de *Statistical Rethinking* (McElreath, 2ed.) sobre supervivencia de renacuajos (ejemplo 13.1 del libro). En específico, se plantea un modelo modelo jerárquico, la idea es ir narrando y aumentando la complejidad del modelo con la esperanza de entender mejor el contexto de los datos.
-
 ## Problema {#sec-problema}
 
-En este estudio, se desea analizar la tasa de supervivencia de los renacuajos ante la presencia o introducción de depredadores.
+En nuestro proyecto, utilizamos datos del estudio de Vonesh, J. R. y Bolker, B. M. (2005), el cual examina cómo las ranas de junco del este de África (Hyperolius spinigularis) adaptan sus tiempos de eclosión en respuesta a los depredadores. Este estudio original mostró que, a pesar de las expectativas, las larvas que eclosionaron temprano por presión de los depredadores no solo sobrevivieron, sino que lo hicieron mejor que las larvas de nidadas no perturbadas. Estos hallazgos sugieren que los costos y beneficios asociados con la plasticidad en la eclosión pueden no ser tan directos como se pensaba anteriormente.
 
-Para este proyecto, se utiliza el conjunto de datos de *reedfrogs* disponible en la librería de *rethinking*. Las instrucciones para instalar la librería y cargar los datos están disponibles en el Anexo 1: *Rethinking y sus datos*.
+Nuestro proyecto toma estos datos y resultados para construir un modelo Bayesiano jerárquico. El objetivo es profundizar en la comprensión de cómo las respuestas compensatorias de las larvas pueden alterar los compromisos tradicionalmente asociados con la plasticidad de eclosión inducida por depredadores. El modelo que desarrollamos intenta capturar la dinámica de crecimiento compensatorio y las tasas de depredación específicas de tamaño y densidad que pueden explicar mejor las altas tasas de supervivencia observadas en las larvas eclosionadas temprano. Nuestros análisis proporcionan una perspectiva más matizada sobre cómo las decisiones de eclosión temprana influyen en la supervivencia y el desarrollo posterior de las ranas, indicando que los verdaderos costos de estas decisiones emergen más adelante en la vida de las larvas.
+
+Este enfoque modela matemáticamente las interacciones complejas y ofrece nuevas vías para entender las estrategias adaptativas en anfibios frente a amenazas ambientales.
 
 ## Datos {#sec-datos}
+
+Utilizamos el conjunto de datos de *reedfrogs* disponible en la librería de *rethinking*. Las instrucciones para instalar la librería y cargar los datos están disponibles en el Anexo 1: *Rethinking y sus datos*.
 
 Para este problema contamos inicialmente con 5 variables:
 
@@ -57,58 +54,58 @@ Para este problema contamos inicialmente con 5 variables:
 | surv     | Número de renacuajos que sobrevivieron        |
 | propsurv | Proporción de supervivencia                   |
 
-\newpage
-
-## Anexos {#sec-anexos}
-
-### Rethinking y sus datos {#sec-rethinking-y-sus-datos}
-
-Para instalar la librería de *rethinking*, se pueden seguir las instrucciones del repositorio de McElreath, disponible en este [link](https://github.com/rmcelreath/rethinking "Repositorio de rethinking").
-
-Una vez instalada la librería y sus dependencias, los datos de *reedfrogs,* basta con correr el siguiente código
-
-```{r anexo1_cargarDatos, eval=FALSE}
-library(rethinking)
-data(reedfrogs)
-```
-
-### 
-  - "Mario Medina"
-  - "José Eduardo Gutierrez"
-  - "Mariano Villafuerte"
----
+El conjunto de datos cuenta con información de 48 tanques clasificados en pequeños, medianos y grandes, dependiendo de la densidad de renacuajos en cada uno. Además, disponemos de datos sobre la supervivencia y la tasa de supervivencia en cada tanque.
 
 ```{r}
-# install.packages(c("coda","mvtnorm","devtools","loo","dagitty","shape"))
-# devtools::install_github("rmcelreath/rethinking")
+#| echo: FALSE
+df <- reedfrogs
 
-# install.packages("tidyverse")
-# install.packages("DiagrammeR")
+# Add an index column to the data frame
+df$index <- seq.int(nrow(df))
+
+# Calculate the mean of propsurv
+mean_propsurv <- mean(df$propsurv)
 ```
 
-```{r}
-#| include: false
-library(tidyverse)
-library(DiagrammeR)
-library(rethinking)
-library(ggplot2)
-ggplot2::theme_set(ggplot2::theme_light())
+```{r scatter1}
+#| echo: FALSE
+# Create the scatterplot with annotations
+p <- ggplot(df, 
+            aes(x = index, 
+                y = propsurv)) +
+  geom_point() +
+  geom_hline(yintercept = mean_propsurv, 
+             linetype = "dashed", 
+             color = "black") +
+  annotate("text", 
+           x = max(df$index) - 23, 
+           y = mean_propsurv + 0.05, 
+           label = "Promedio de supervivencia en tanques", 
+           color = "black", fontface = "italic", hjust = 0) +  
+  labs(x = "Tanque", y = "Tasa de Supervivencia") +
+  theme(
+    axis.title.x = element_text(face = "italic"),
+    axis.title.y = element_text(face = "italic")) +
+  scale_x_continuous(breaks = c(8, 24, 40), 
+                     labels = c("1 <= tanques S < 16", 
+                                "16 <= tanques M < 32", 
+                                "32 <= tanques L < 48")) +
+  geom_vline(xintercept = 16, color = "brown")+
+  geom_vline(xintercept = 32, color = "brown")+
+  geom_vline(xintercept = 48, color = "brown")
+
+
+p
 ```
 
-## Abstract
+Hay mucha variación en estos datos. Parte de la variación proviene del tratamiento experimental, pero mucha también proviene de otras fuentes. Pensemos en cada fila como un “tanque,” un entorno experimental que contiene renacuajos. Hay muchas cosas peculiares de cada tanque que no se miden, y estos factores no medidos crean variación en la supervivencia entre tanques, incluso cuando todas las variables predictoras tienen el mismo valor. Se realizan múltiples observaciones, en este caso los renacuajos, dentro de cada grupo
 
-En nuestro proyecto, utilizamos datos del estudio de Vonesh, J. R. y Bolker, B. M. (2005), el cual examina cómo las ranas de junco del este de África (Hyperolius spinigularis) adaptan sus tiempos de eclosión en respuesta a los depredadores. Este estudio original mostró que, a pesar de las expectativas, las larvas que eclosionaron temprano por presión de los depredadores no solo sobrevivieron, sino que lo hicieron mejor que las larvas de nidadas no perturbadas. Estos hallazgos sugieren que los costos y beneficios asociados con la plasticidad en la eclosión pueden no ser tan directos como se pensaba anteriormente.
+## Modelo
 
-Nuestro proyecto toma estos datos y resultados para construir un modelo Bayesiano jerárquico. El objetivo es profundizar en la comprensión de cómo las respuestas compensatorias de las larvas pueden alterar los compromisos tradicionalmente asociados con la plasticidad de eclosión inducida por depredadores. El modelo que desarrollamos intenta capturar la dinámica de crecimiento compensatorio y las tasas de depredación específicas de tamaño y densidad que pueden explicar mejor las altas tasas de supervivencia observadas en las larvas eclosionadas temprano. Nuestros análisis proporcionan una perspectiva más matizada sobre cómo las decisiones de eclosión temprana influyen en la supervivencia y el desarrollo posterior de las ranas, indicando que los verdaderos costos de estas decisiones emergen más adelante en la vida de las larvas.
-
-Este enfoque modela matemáticamente las interacciones complejas y ofrece nuevas vías para entender las estrategias adaptativas en anfibios frente a amenazas ambientales.
-
-## Problema
-
-El conjunto de datos cuenta con información de 48 tanques clasificados en pequeños, medianos y grandes, dependiendo de la densidad de renacuajos en cada uno. Además, disponemos de datos sobre la supervivencia y la tasa de supervivencia en cada tanque. El modelo jerárquico que proponemos pretende capturar estas complejas interacciones entre la densidad, la tasa de supervivencia y otros factores clave para proporcionar una comprensión más profunda de las estrategias adaptativas de las ranas frente a las amenazas de los depredadores.
+El modelo jerárquico que proponemos pretende capturar estas complejas interacciones entre la densidad, la tasa de supervivencia y otros factores clave para proporcionar una comprensión más profunda de las estrategias adaptativas de las ranas frente a las amenazas de los depredadores.
 
 ```{r}
-#| code-fold: true
+#| echo: FALSE
 grViz("
 digraph {
   graph [ranksep = 0.2, rankdir=LR]
@@ -127,40 +124,17 @@ digraph {
 ", width = 150, height = 40)
 ```
 
-## Datos
+\newpage
 
-```{r}
+## Anexos {#sec-anexos}
+
+### Rethinking y sus datos {#sec-rethinking-y-sus-datos}
+
+Para instalar la librería de *rethinking*, se pueden seguir las instrucciones del repositorio de McElreath, disponible en este [link](https://github.com/rmcelreath/rethinking "Repositorio de rethinking").
+
+Una vez instalada la librería y sus dependencias, los datos de *reedfrogs,* basta con correr el siguiente código
+
+```{r anexo1_cargarDatos, eval=FALSE}
+library(rethinking)
 data(reedfrogs)
-df <- reedfrogs
-
-# Add an index column to the data frame
-df$index <- seq.int(nrow(df))
-
-# Calculate the mean of propsurv
-mean_propsurv <- mean(df$propsurv)
-
-
 ```
-
-```{r}
-# Create the scatterplot with annotations
-p <- ggplot(df, aes(x = index, y = propsurv)) +
-  geom_point() +
-  geom_hline(yintercept = mean_propsurv, linetype = "dashed", color = "black") +
-  annotate("text", x = max(df$index) - 23, y = mean_propsurv + 0.05, label = "Promedio de supervivencia en tanques", color = "black", fontface = "italic", hjust = 0) +  
-  labs(x = "Tanque", y = "Tasa de Supervivencia") + 
-  theme_minimal() +  # Apply minimal theme
-  theme(
-    axis.title.x = element_text(face = "italic"),
-    axis.title.y = element_text(face = "italic")
-  ) +
-  scale_x_continuous(breaks = c(8, 24, 40), labels = c("1 <= tanques S < 16", "16 <= tanques M < 32", "32 <= tanques L < 48")) +
-  geom_vline(xintercept = 16, color = "brown")+
-  geom_vline(xintercept = 32, color = "brown")+
-  geom_vline(xintercept = 48, color = "brown")
-
-
-p
-```
-
-Hay mucha variación en estos datos. Parte de la variación proviene del tratamiento experimental, pero mucha también proviene de otras fuentes. Pensemos en cada fila como un “tanque,” un entorno experimental que contiene renacuajos. Hay muchas cosas peculiares de cada tanque que no se miden, y estos factores no medidos crean variación en la supervivencia entre tanques, incluso cuando todas las variables predictoras tienen el mismo valor. Se realizan múltiples observaciones, en este caso los renacuajos, dentro de cada grupo
