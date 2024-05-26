@@ -437,6 +437,140 @@ p <- ggplot(df,
 p
 ```
 
+## Modelo Parcialmente Agrupado
+
+$$ S_i \sim \textrm{Binomial}(D_i, p_i) $$
+
+$$ \textrm{logit}(p_i) = \alpha_{\textrm{TANK}[i]} $$
+
+$$ \alpha_j \sim \textrm{Normal}(\bar{\alpha}, \sigma) $$
+
+$$ \bar{\alpha} \sim \textrm{Normal}(0, 1.5) $$
+
+$$ \sigma \sim \textrm{Exponential}(1) $$
+
+```{stan output.var="m_3"}
+data {
+  int<lower=0> T;         // Num de tanques
+  int<lower=0> S[T];      // Num de renacuajos que sobrevivieron
+  int<lower=0> D[T];      // Densidad inicial
+}
+
+parameters {
+  real<lower=0> alpha_bar;        // Promedio del alpha
+  real<lower=0> sigma_alpha;      // Desviación estándar de los alphas
+  vector[T] alpha_tank;           // Alphas individuales para cada tanque
+}
+
+model {
+  // Priors
+  alpha_bar ~ normal(0, 1.5);
+  sigma_alpha ~ exponential(1);
+  alpha_tank ~ normal(alpha_bar, sigma_alpha);
+
+  for (t in 1:T) {
+    S[t] ~ binomial(D[t], inv_logit(alpha_tank[t]));
+  }
+}
+
+generated quantities {
+  int S_rep[T]; 
+
+  for (t in 1:T) {
+    S_rep[t] = binomial_rng(D[t], inv_logit(alpha_tank[t]));
+  }
+}
+```
+
+```{r ajuste_m3}
+#| echo: FALSE
+#| message: FALSE
+#| warning: FALSE
+
+dat <- list(
+  "T" = max(df$tank),
+  S = df$surv,
+  D = df$density
+)
+
+fit3 <- rstan::sampling(m_3, 
+                 data = dat, 
+                 iter = 1000, 
+                 chains = 2, 
+                 cores = 2,
+                 refresh=0)
+```
+
+```{r fit_m3}
+#| echo: FALSE
+#| warning: FALSE
+#| message: FALSE
+
+fit3_summary <- rstan::summary(fit3, 
+                               probs = c(0.025,
+                                         0.5,
+                                         0.975),
+                               pars=c('alpha_tank','lp__'))$summary 
+
+fit3_summary |> 
+  as.data.frame() |>
+  rownames_to_column("parameter") |>
+  select(parameter,mean, sd, "2.5%", "50%", "97.5%", n_eff, Rhat) |>
+  gt() |>
+  fmt_number()
+
+```
+
+```{r predictions_m3}
+#| echo: FALSE
+#| message: FALSE
+#| warning: FALSE
+
+post3 <- as.data.frame(fit3, pars = c('S_rep'))
+df$urv_est3 <- post3 %>% colMeans
+df$propsurv_est3 <- df$urv_est3/df$density
+
+alpha3 <- as.data.frame(fit3, pars = c('alpha_tank')) 
+alpha_est3 <- alpha3$alpha %>% mean() %>% plogis
+
+# Create the scatterplot with annotations
+p <- ggplot(df, 
+            aes(x = index, 
+                y = propsurv_est3)) +
+  geom_point(data=df, 
+          aes(x = index, 
+              y = propsurv), color='grey')+
+  geom_point(color = 'blue3') +
+  geom_hline(yintercept = alpha_est, 
+             linetype = "dashed", 
+             color = "blue4") +
+  # annotate("text", 
+  #          x = max(df$index) - 23, 
+  #          y = alpha_est + 0.05, 
+  #          label = "Promedio de supervivencia en tanques", 
+  #          color = "black", 
+  #          fontface = "italic", 
+  #          hjust = 0) +  
+  labs(x = "Tanque", 
+       y = "Tasa de Supervivencia") +
+  theme(
+    axis.title.x = element_text(face = "italic"),
+    axis.title.y = element_text(face = "italic")
+  ) +
+  scale_x_continuous(breaks = c(8, 24, 40), 
+                     labels = c("1 <= Pequeño < 16", 
+                                "16 <= Mediano < 32", 
+                                "32 <= Grande < 48")) +
+  geom_vline(xintercept = 16, color = "cyan3")+
+  geom_vline(xintercept = 32, color = "cyan3")+
+  geom_vline(xintercept = 48, color = "cyan3")+
+  # ylim(0, 1) +
+  scale_y_continuous(labels = scales::percent_format())
+
+p
+
+```
+
 \newpage
 
 ## Anexos {#sec-anexos}
