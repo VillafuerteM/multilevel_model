@@ -74,7 +74,7 @@ Para este problema contamos inicialmente con 5 variables:
 
 El conjunto de datos cuenta con información de 48 tanques clasificados en pequeños, medianos y grandes, dependiendo de la densidad de renacuajos en cada uno. Además, disponemos de datos sobre la supervivencia y la tasa de supervivencia en cada tanque.
 
-```{r}
+```{r dataframe_calc}
 #| echo: FALSE
 df <- reedfrogs
 
@@ -128,7 +128,7 @@ Tenemos medidas repetidas y heterogeneidad entre grupos. Si ignoramos los grupos
 
 El modelo jerárquico que proponemos pretende capturar estas complejas interacciones entre la densidad, la tasa de supervivencia y otros factores clave para proporcionar una comprensión más profunda de las estrategias adaptativas de las ranas frente a las amenazas de los depredadores.
 
-```{r}
+```{r dag_graph}
 #| echo: FALSE
 grViz("
 digraph {
@@ -298,14 +298,144 @@ p <- ggplot(df,
   scale_y_continuous(labels = scales::percent_format())
 
 p
-
 ```
 
 Y podemos observar que las predicciones (puntos azules) se ajustan al promedio de supervivencia en los tanques (línea punteada azul). Vemos que este modelo nos lleva a un subajuste. En gris apreciamos los datos originales.
 
 ## Modelo No Agrupado
 
-Otra opción que tenemos es asumir que cada tanque tiene su propia $\alpha$ y que no podemos obtener información para un tanque al observar los otros tanques.
+Otra opción que tenemos es asumir que cada tanque tiene su propia $\alpha$ y que no podemos obtener información para un tanque al observar los otros tanques. De tal manera que:
+
+$$ S_i \sim \textrm{Binomial}(D_i,p_i) $$
+
+$$ \textrm{logit}(p_i) = \alpha_i $$
+
+$$ \alpha_i = \textrm{Normal}(0, 1.5) $$
+
+Lo cual se traduce en el siguiente código de Stan:
+
+```{stan output.var="m_2"}
+data {
+  int<lower=0> T;             // Número de tanques
+  int<lower=0> S[T];          // Número de sobrevivientes
+  int<lower=0> D[T];          // Densidad inicial
+}
+
+parameters {
+  real alpha[T];              // alpha para cada tanque
+}
+
+model {
+  // Priors para cada alpha_i
+  for (i in 1:T) {
+    alpha[i] ~ normal(0, 1.5);
+  }
+  
+  // Modelo para cada tanque
+  for (t in 1:T) {
+    S[t] ~ binomial(D[t], inv_logit(alpha[t]));
+  }
+}
+
+generated quantities {
+  int S_rep[T];
+
+  // Generar predicciones 
+  for (t in 1:T) {
+    S_rep[t] = binomial_rng(D[t], inv_logit(alpha[t]));
+  }
+}
+
+```
+
+```{r ajuste_m2}
+#| echo: FALSE
+#| message: FALSE
+#| warning: FALSE
+
+dat <- list(
+  "T" = max(df$tank),
+  S = df$surv,
+  D = df$density
+)
+
+fit2 <- rstan::sampling(m_2, 
+                 data = dat, 
+                 iter = 1000, 
+                 chains = 2, 
+                 cores = 2,
+                 refresh=0)
+```
+
+Podemos ver los resultados de nuestro segundo modelo para la estimación de $\alpha$.
+
+```{r fit_m2}
+#| echo: FALSE
+#| warning: FALSE
+#| message: FALSE
+
+fit2_summary <- rstan::summary(fit2, 
+                               probs = c(0.025,
+                                         0.5,
+                                         0.975),
+                               pars=c('alpha','lp__'))$summary 
+
+fit2_summary |> 
+  as.data.frame() |>
+  rownames_to_column("parameter") |>
+  select(parameter,mean, sd, "2.5%", "50%", "97.5%", n_eff, Rhat) |>
+  gt() |>
+  fmt_number()
+```
+
+```{r predictions_m2}
+#| echo: FALSE
+#| message: FALSE
+#| warning: FALSE
+
+post2 <- as.data.frame(fit2, pars = c('S_rep'))
+df$urv_est2 <- post2 %>% colMeans
+df$propsurv_est2 <- df$urv_est2/df$density
+
+alpha2 <- as.data.frame(fit2, pars = c('alpha')) 
+alpha_est2 <- alpha2$alpha %>% mean() %>% plogis
+
+# Create the scatterplot with annotations
+p <- ggplot(df, 
+            aes(x = index, 
+                y = propsurv_est2)) +
+  geom_point(data=df, 
+          aes(x = index, 
+              y = propsurv), color='grey')+
+  geom_point(color = 'blue3') +
+  geom_hline(yintercept = alpha_est, 
+             linetype = "dashed", 
+             color = "blue4") +
+  # annotate("text", 
+  #          x = max(df$index) - 23, 
+  #          y = alpha_est + 0.05, 
+  #          label = "Promedio de supervivencia en tanques", 
+  #          color = "black", 
+  #          fontface = "italic", 
+  #          hjust = 0) +  
+  labs(x = "Tanque", 
+       y = "Tasa de Supervivencia") +
+  theme(
+    axis.title.x = element_text(face = "italic"),
+    axis.title.y = element_text(face = "italic")
+  ) +
+  scale_x_continuous(breaks = c(8, 24, 40), 
+                     labels = c("1 <= Pequeño < 16", 
+                                "16 <= Mediano < 32", 
+                                "32 <= Grande < 48")) +
+  geom_vline(xintercept = 16, color = "cyan3")+
+  geom_vline(xintercept = 32, color = "cyan3")+
+  geom_vline(xintercept = 48, color = "cyan3")+
+  # ylim(0, 1) +
+  scale_y_continuous(labels = scales::percent_format())
+
+p
+```
 
 \newpage
 
