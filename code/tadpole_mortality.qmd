@@ -595,11 +595,13 @@ aux <- post3 %>%
                values_to="value") %>%
   group_by(parameter) %>%
   summarise(m3_q2_5=quantile(value, probs = 0.025),
+            m3_mean=mean(value, na.rm=T),
             m3_q97_5=quantile(value, probs = 0.975)) %>% 
   ungroup() %>% 
   mutate(index=as.numeric(gsub("[^0-9]", "", parameter))) %>%
   left_join(df %>% select(index, density), by="index") %>% 
   mutate(m3_lower = m3_q2_5/density, 
+         m3_sup = m3_mean/density,
          m3_upper = m3_q97_5/density)
 
 aux2 <- post2 %>% 
@@ -608,11 +610,13 @@ aux2 <- post2 %>%
                values_to="value") %>%
   group_by(parameter) %>% 
   summarise(m2_q2_5=quantile(value, probs = 0.025), 
+            m2_mean=mean(value, na.rm=T),
             m2_q97_5=quantile(value, probs = 0.975)) %>% 
   ungroup() %>%
   mutate(index=as.numeric(gsub("[^0-9]", "", parameter))) %>%
   left_join(df %>% select(index, density), by="index") %>% 
   mutate(m2_lower = m2_q2_5/density,
+         m2_sup = m2_mean/density,
          m2_upper = m2_q97_5/density)
 ```
 
