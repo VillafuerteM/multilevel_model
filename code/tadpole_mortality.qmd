@@ -37,6 +37,7 @@ library(DiagrammeR)
 library(gt)
 library(loo)
 library(mvtnorm)
+library(patchwork)
 library(rethinking)
 library(rstan)
 library(scales)
@@ -439,6 +440,10 @@ p
 
 ## Modelo Parcialmente Agrupado
 
+Pero igualmente se puede optar por un modelo parcialmente agrupado. En este caso, se agregan dos parámetros: $\bar{\alpha}$ y $\sigma$, los cuáles llamaremos hiperparámetros desde este punto. El punto es que, en el modelo anterior, todas las $\alpha_i$ se distribuían Normal con una media y desviación estándar establecida. Con esta modificación, los $\alpha_i$ comparten una misma distribución, lo que le permite transmitir información entre tanques al modelo.
+
+El modelo se ve así:
+
 $$ S_i \sim \textrm{Binomial}(D_i, p_i) $$
 
 $$ \textrm{logit}(p_i) = \alpha_{\textrm{TANK}[i]} $$
@@ -449,6 +454,8 @@ $$ \bar{\alpha} \sim \textrm{Normal}(0, 1.5) $$
 
 $$ \sigma \sim \textrm{Exponential}(1) $$
 
+Lo que se traduce en el siguiente código de Stan:
+
 ```{stan output.var="m_3"}
 data {
   int<lower=0> T;         // Num de tanques
@@ -458,14 +465,15 @@ data {
 
 parameters {
   real<lower=0> alpha_bar;        // Promedio del alpha
-  real<lower=0> sigma_alpha;      // Desviación estándar de los alphas
-  vector[T] alpha_tank;           // Alphas individuales para cada tanque
+  real<lower=0> sigma_alpha;      // Desv est de los alphas
+  vector[T] alpha_tank;           // Alpha de cada tanque
 }
 
 model {
-  // Priors
+  // Hyperpriors 
   alpha_bar ~ normal(0, 1.5);
   sigma_alpha ~ exponential(1);
+  // Priors
   alpha_tank ~ normal(alpha_bar, sigma_alpha);
 
   for (t in 1:T) {
@@ -518,8 +526,9 @@ fit3_summary |>
   select(parameter,mean, sd, "2.5%", "50%", "97.5%", n_eff, Rhat) |>
   gt() |>
   fmt_number()
-
 ```
+
+Y podemos, nuevamente, ver cómo se comportan nuestras predicciones contra los valores observados.
 
 ```{r predictions_m3}
 #| echo: FALSE
@@ -571,7 +580,150 @@ p
 
 ```
 
-\newpage
+## Comparativo
+
+A simple vista, pareciera que el modelo sin agrupar y el modelo parcialmente agrupado (jerárquico) tienen comportamientos similares. Podemos graficar las estimaciones de una y otra para ver el comportamiento con mayor detenimiento.
+
+```{r tablas auxiliares}
+#| echo: FALSE
+#| message: FALSE
+#| warning: FALSE
+
+aux <- post3 %>% 
+  pivot_longer(cols=1:ncol(post3), 
+               names_to="parameter", 
+               values_to="value") %>%
+  group_by(parameter) %>%
+  summarise(m3_q2_5=quantile(value, probs = 0.025),
+            m3_q97_5=quantile(value, probs = 0.975)) %>% 
+  ungroup() %>% 
+  mutate(index=as.numeric(gsub("[^0-9]", "", parameter))) %>%
+  left_join(df %>% select(index, density), by="index") %>% 
+  mutate(m3_lower = m3_q2_5/density, 
+         m3_upper = m3_q97_5/density)
+
+aux2 <- post2 %>% 
+  pivot_longer(cols=1:ncol(post2), 
+               names_to="parameter", 
+               values_to="value") %>%
+  group_by(parameter) %>% 
+  summarise(m2_q2_5=quantile(value, probs = 0.025), 
+            m2_q97_5=quantile(value, probs = 0.975)) %>% 
+  ungroup() %>%
+  mutate(index=as.numeric(gsub("[^0-9]", "", parameter))) %>%
+  left_join(df %>% select(index, density), by="index") %>% 
+  mutate(m2_lower = m2_q2_5/density,
+         m2_upper = m2_q97_5/density)
+```
+
+```{r graficas_comparativo}
+#| echo: FALSE
+#| warning: FALSE
+#| message: FALSE
+
+p1<- ggplot(df, 
+       aes(x = index, 
+           y = propsurv_est3)) +
+  geom_point(data=df, 
+             aes(x = index, 
+                 y = propsurv), color='grey')+
+  geom_point(color = 'blue3') +
+  geom_point(aes(x=index, y=propsurv_est2), color='red3') +
+  geom_hline(yintercept = alpha_est, 
+             linetype = "dashed", 
+             color = "blue4") +
+  labs(x = "Tanque", 
+       y = "Tasa de Supervivencia",
+       title="Comparativo entre modelos",
+       subtitle="No agrupado = rojo, Jerárquico = azul") +
+  theme(
+    axis.title.x = element_text(face = "italic"),
+    axis.title.y = element_text(face = "italic")) +
+  scale_x_continuous(breaks = c(8, 24, 40), 
+                     labels = c("1 <= Pequeño < 16", 
+                                "16 <= Mediano < 32", 
+                                "32 <= Grande < 48")) +
+  geom_vline(xintercept = 15.5, color = "cyan3")+
+  geom_vline(xintercept = 31.5, color = "cyan3")+
+  geom_vline(xintercept = 48.5, color = "cyan3")+
+  scale_y_continuous(labels = scales::percent_format())
+
+p3 <- ggplot(df, 
+       aes(x = index, 
+           y = propsurv_est3)) +
+  geom_point(data=df, 
+             aes(x = index, 
+                 y = propsurv), color='grey')+
+  geom_point(color = 'blue3') +
+  geom_segment(data=aux,
+               aes(x = index,
+                   xend = index,
+                   y = m3_lower,,
+                   yend = m3_upper),
+               color = "blue", alpha=0.2, linewidth = 1) +
+  geom_hline(yintercept = alpha_est, 
+             linetype = "dashed", 
+             color = "blue4") +
+  labs(x = "Tanque", 
+       y = "",
+       title="Modelo jerárquico") +
+  theme(
+    axis.title.x = element_text(face = "italic"),
+    axis.title.y = element_text(face = "italic")
+  ) +
+  scale_x_continuous(breaks = c(8, 24, 40), 
+                     labels = c("1 <= Pequeño < 16", 
+                                "16 <= Mediano < 32", 
+                                "32 <= Grande < 48")) +
+  geom_vline(xintercept = 15.5, color = "cyan3")+
+  geom_vline(xintercept = 31.5, color = "cyan3")+
+  geom_vline(xintercept = 48.5, color = "cyan3")+
+  scale_y_continuous(labels = scales::percent_format())
+
+p2 <- ggplot(df, 
+       aes(x = index, 
+           y = propsurv_est2)) +
+  geom_point(data=df, 
+             aes(x = index, 
+                 y = propsurv), color='grey')+
+  geom_point(color='red3') +
+  geom_segment(data=aux2,
+               aes(x = index,
+                   xend = index,
+                   y = m2_lower,,
+                   yend = m2_upper),
+               color = "red", alpha=0.2, linewidth = 1) +
+  geom_hline(yintercept = alpha_est, 
+             linetype = "dashed", 
+             color = "blue4") +
+  labs(x = "Tanque", 
+       y = "Tasa de Supervivencia",
+       title="Modelo no agrupado") +
+  theme(
+    axis.title.x = element_text(face = "italic"),
+    axis.title.y = element_text(face = "italic")
+  ) +
+  scale_x_continuous(breaks = c(8, 24, 40), 
+                     labels = c("1 <= Pequeño < 16", 
+                                "16 <= Mediano < 32", 
+                                "32 <= Grande < 48")) +
+  geom_vline(xintercept = 15.5, color = "cyan3")+
+  geom_vline(xintercept = 31.5, color = "cyan3")+
+  geom_vline(xintercept = 48.5, color = "cyan3")+
+  scale_y_continuous(labels = scales::percent_format())
+
+p1
+```
+
+Pero podemos incluir intervalos de credibilidad para ver su comportamiento:
+
+```{r graf_comp2}
+#| echo: FALSE
+#| message: FALSE
+#| warning: FALSE
+
+(p2/p3)
+```
 
 ## Anexos {#sec-anexos}
 
