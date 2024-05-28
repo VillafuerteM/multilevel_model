@@ -580,6 +580,43 @@ p
 
 ```
 
+## Diagnósticos de convergencia
+
+```{r}
+library(bayesplot)
+
+posterior_samples <- As.mcmc.list(fit3)
+mcmc_trace(posterior_samples, pars = c("alpha_bar","sigma_alpha", "alpha_tank[1]"))
+```
+
+```{r}
+fit3_diagnosticos <- rstan::summary(fit3, 
+                               probs = c(0.025,
+                                         0.5,
+                                         0.975),
+                               pars=c('alpha_bar','sigma_alpha'))$summary 
+
+fit3_diagnosticos |> 
+  as.data.frame() |>
+  rownames_to_column("parameter") |>
+  select(parameter,mean, sd, "2.5%", "50%", "97.5%", n_eff, Rhat) |>
+  gt() |>
+  fmt_number()
+```
+
+```{r}
+summary_fit3 <- summary(fit3)
+rhats <- summary_fit3$summary[, "Rhat"]
+names(rhats) <- rownames(summary_fit3$summary)
+
+color_scheme_set("brightblue")
+
+mcmc_rhat(rhats)+ ggtitle("R hat para todos los parámetros del modelo")
+
+```
+
+Observamos que las cadenas se ven bien mezcladas, y esto a su vez se refleja en un Rhat muy cercana a 1 para todos los parametros y un buen numero effectivo de muestras.
+
 ## Comparativo
 
 A simple vista, pareciera que el modelo sin agrupar y el modelo parcialmente agrupado (jerárquico) tienen comportamientos similares. Podemos graficar las estimaciones de una y otra para ver el comportamiento con mayor detenimiento.
