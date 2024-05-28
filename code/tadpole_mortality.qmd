@@ -161,7 +161,7 @@ Con
 
 -   $\textrm{S}=\textrm{Supervivencia}$
 
-Si bien podríamos considerar que existe alguna otra relación entre las variables, debemos considerar que los datos provienen de un experimento controlado. Sería correcto considerar algunas relaciones como que el tamaño de los renacuajos puede tener un efecto en la densidad; o la presencia de los depredadores en la densidad; o factores no observados como la cantidad de comida u otros recursos en el tamaño y en la densidad; o bien, factores genéticos en el tamaño de los renacuajos. Sería interesante repetir estas estimaciones en cuerpos de agua en la naturaleza, mas no en tanques controlados. Por el momento, el experimento sirve para estudiar la tasa de supervivencia en un ambiente controlado.
+Si bien podríamos considerar que existe alguna otra relación entre las variables, debemos considerar que los datos provienen de un experimento controlado. En otro contexto, sería correcto considerar algunas relaciones como que el tamaño de los renacuajos puede tener un efecto en la densidad; o la presencia de los depredadores en la densidad; o factores no observados como la cantidad de comida u otros recursos en el tamaño y en la densidad; o bien, factores genéticos en el tamaño de los renacuajos. Sería interesante repetir estas estimaciones en cuerpos de agua en la naturaleza, mas no en tanques controlados. Por el momento, el experimento sirve para estudiar la tasa de supervivencia en un ambiente controlado.
 
 ## Modelo Completamente Agrupado
 
@@ -277,13 +277,6 @@ p <- ggplot(df,
   geom_hline(yintercept = alpha_est, 
              linetype = "dashed", 
              color = "blue4") +
-  # annotate("text", 
-  #          x = max(df$index) - 23, 
-  #          y = alpha_est + 0.05, 
-  #          label = "Promedio de supervivencia en tanques", 
-  #          color = "black", 
-  #          fontface = "italic", 
-  #          hjust = 0) +  
   labs(x = "Tanque", 
        y = "Tasa de Supervivencia") +
   theme(
@@ -410,7 +403,7 @@ p <- ggplot(df,
   geom_point(data=df, 
           aes(x = index, 
               y = propsurv), color='grey')+
-  geom_point(color = 'blue3') +
+  geom_point(color = 'red3') +
   geom_hline(yintercept = alpha_est, 
              linetype = "dashed", 
              color = "blue4") +
@@ -448,11 +441,11 @@ El modelo se ve así:
 
 $$ S_i \sim \textrm{Binomial}(D_i, p_i) $$
 
-$$ \textrm{logit}(p_i) = \alpha_{\textrm{TANK}[i]} $$
+$$ \textrm{logit}(p_i) = \alpha_{\textrm{Tanque}[i]} $$
 
-$$ \alpha_j \sim \textrm{Normal}(\bar{\alpha}, \sigma) $$
+$$ \alpha_j \sim \textrm{Normal}(\mu, \sigma) $$
 
-$$ \bar{\alpha} \sim \textrm{Normal}(0, 1.5) $$
+$$ \mu \sim \textrm{Normal}(0, 1.5) $$
 
 $$ \sigma \sim \textrm{Exponential}(1) $$
 
@@ -466,17 +459,17 @@ data {
 }
 
 parameters {
-  real<lower=0> alpha_bar;        // Promedio del alpha
+  real<lower=0> mu_alpha;        // Promedio del alpha
   real<lower=0> sigma_alpha;      // Desv est de los alphas
   vector[T] alpha_tank;           // Alpha de cada tanque
 }
 
 model {
   // Hyperpriors 
-  alpha_bar ~ normal(0, 1.5);
+  mu_alpha ~ normal(0, 1.5);
   sigma_alpha ~ exponential(1);
   // Priors
-  alpha_tank ~ normal(alpha_bar, sigma_alpha);
+  alpha_tank ~ normal(mu_alpha, sigma_alpha);
 
   for (t in 1:T) {
     S[t] ~ binomial(D[t], inv_logit(alpha_tank[t]));
@@ -490,6 +483,7 @@ generated quantities {
     S_rep[t] = binomial_rng(D[t], inv_logit(alpha_tank[t]));
   }
 }
+
 ```
 
 ```{r ajuste_m3}
@@ -523,6 +517,28 @@ fit3_summary <- rstan::summary(fit3,
                                pars=c('alpha_tank','lp__'))$summary 
 
 fit3_summary |> 
+  as.data.frame() |>
+  rownames_to_column("parameter") |>
+  select(parameter,mean, sd, "2.5%", "50%", "97.5%", n_eff, Rhat) |>
+  gt() |>
+  fmt_number()
+```
+
+Y para los hiperparámetros
+
+```{r fit_m3_pt2}
+#| echo: FALSE
+#| warning: FALSE
+#| message: FALSE
+
+fit3_summary2 <- rstan::summary(fit3, 
+                               probs = c(0.025,
+                                         0.5,
+                                         0.975),
+                               pars=c('mu_alpha',
+                                      'sigma_alpha'))$summary 
+
+fit3_summary2 |> 
   as.data.frame() |>
   rownames_to_column("parameter") |>
   select(parameter,mean, sd, "2.5%", "50%", "97.5%", n_eff, Rhat) |>
@@ -579,7 +595,7 @@ p
 
 A simple vista, pareciera que el modelo sin agrupar y el modelo parcialmente agrupado (jerárquico) tienen comportamientos similares. Podemos graficar las estimaciones de una y otra para ver el comportamiento con mayor detenimiento.
 
-```{r tablas auxiliares}
+```{r tablas_auxiliares}
 #| echo: FALSE
 #| message: FALSE
 #| warning: FALSE
@@ -728,7 +744,29 @@ Pero podemos incluir intervalos de credibilidad para ver su comportamiento:
 
 En los modelos anteriores no estamos incorporando todas las variables, y como lo que deseamos es estudiar el fenómeno, incluir todas las variables, dado nuestro DAG, puede mejorar la estimación de los efectos por variable. Podemos extender entonces la idea del Modelo Jerárquico e incorporar las otras variables. De tal modo que:
 
+$$ S_i \sim \textrm{Binomial}(D_i, p_i) $$
+
+$$ \textrm{logit}(p_i) = \alpha_{\textrm{Tanque}[i]} + \beta_p *\textrm{pred} + \beta_s *\textrm{size}$$
+
+$$ \alpha_j \sim \textrm{Normal}(\mu, \sigma) $$
+
+$$ \mu \sim \textrm{Normal}(0, 1.5) $$
+
+$$ \sigma \sim \textrm{Exponential}(1) $$
+
+$$
+\beta_p \sim \textrm{Normal}(-0.5,1)
+$$
+
+$$
+\beta_s \sim \textrm{Normal}(0,1)
+$$
+
 ```{r preparando_df}
+#| echo: FALSE 
+#| warning: FALSE
+#| message: FALSE
+
 df <- df %>% 
   mutate(pred_num=ifelse(pred=='no',0,1),
          size_num=ifelse(size=='small',0,1)
@@ -747,20 +785,20 @@ data {
 }
 
 parameters {
-  real<lower=0> alpha_bar;      // Promedio de alpha
+  real<lower=0> mu_alpha;      // Promedio de alpha
   real<lower=0> sigma_alpha;    // Desviación estándar de los alphas
   vector[T] alpha_tank;         // Alpha para cada tanque
-  real bp;                      // Coeficiente para los depredadores
-  real bs;                      // Coeficiente para el tamaño de los renacuajos
+  real bp;                      // Coef para los depredadores
+  real bs;                      // Coef del tamaño de los renacuajos
 }
 
 model {
   // Hyperpriors
-  alpha_bar ~ normal(0, 1.5);
+  mu_alpha ~ normal(0, 1.5);
   sigma_alpha ~ exponential(1);
 
   // Priors
-  alpha_tank ~ normal(alpha_bar, sigma_alpha);
+  alpha_tank ~ normal(mu_alpha, sigma_alpha);
   bp ~ normal(-0.5, 1);
   bs ~ normal(0, 1);  // Prior normal para el coeficiente de tamaño
 
@@ -805,6 +843,10 @@ fit4 <- rstan::sampling(m_4,
 ```
 
 ```{r tabla_m4}
+#| echo: FALSE
+#| message: FALSE
+#| warning: FALSE
+
 fit4_summary <- rstan::summary(fit4, 
                                probs = c(0.025,
                                          0.5,
@@ -812,6 +854,28 @@ fit4_summary <- rstan::summary(fit4,
                                pars=c('alpha_tank','lp__'))$summary 
 
 fit4_summary |> 
+  as.data.frame() |>
+  rownames_to_column("parameter") |>
+  select(parameter,mean, sd, "2.5%", "50%", "97.5%", n_eff, Rhat) |>
+  gt() |>
+  fmt_number()
+```
+
+```{r}
+#| echo: FALSE
+#| message: FALSE
+#| warning: FALSE
+
+fit4_summary2 <- rstan::summary(fit4, 
+                               probs = c(0.025,
+                                         0.5,
+                                         0.975),
+                               pars=c('mu_alpha',
+                                      'sigma_alpha',
+                                      'bp',
+                                      'bs'))$summary 
+
+fit4_summary2 |> 
   as.data.frame() |>
   rownames_to_column("parameter") |>
   select(parameter,mean, sd, "2.5%", "50%", "97.5%", n_eff, Rhat) |>
@@ -864,7 +928,7 @@ p
 
 ```
 
-Pero podemos repetir igualmente el ejercicio anterior para comparar entre modelos:
+Y podemos repetir igualmente el ejercicio anterior para comparar entre modelos:
 
 ```{r tabla_aux4}
 #| echo: FALSE
@@ -888,6 +952,9 @@ aux4 <- post4 %>%
 ```
 
 ```{r}
+#| echo: FALSE
+#| message: FALSE
+#| warning: FALSE
 p1<- ggplot(df, 
        aes(x = index, 
            y = propsurv_est3)) +
@@ -983,6 +1050,9 @@ p1
 ```
 
 ```{r}
+#| echo: FALSE
+#| message: FALSE
+#| warning: FALSE
 (p3/p2)
 ```
 
@@ -1042,6 +1112,8 @@ p4 <- ggplot(df,
 
 p4
 ```
+
+Parece ser que en las aquellos tanques donde no hay presencia de depredadores (sombredos) nuestras predicciones se acercaron más a los valores observados, pero lo contrario pasa cuando hay presencia de depredadores.
 
 ## Anexos {#sec-anexos}
 
