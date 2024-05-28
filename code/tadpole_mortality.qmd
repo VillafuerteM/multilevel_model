@@ -157,9 +157,11 @@ Con
 
 -   $\textrm{G}=\textrm{Tamaño}$
 
--   ${P}=\textrm{Depredadores}$
+-   $\textrm{P}=\textrm{Depredadores}$
 
 -   $\textrm{S}=\textrm{Supervivencia}$
+
+Si bien podríamos considerar que existe alguna otra relación entre las variables, debemos considerar que los datos provienen de un experimento controlado. Sería correcto considerar algunas relaciones como que el tamaño de los renacuajos puede tener un efecto en la densidad; o la presencia de los depredadores en la densidad; o factores no observados como la cantidad de comida u otros recursos en el tamaño y en la densidad; o bien, factores genéticos en el tamaño de los renacuajos. Sería interesante repetir estas estimaciones en cuerpos de agua en la naturaleza, mas no en tanques controlados. Por el momento, el experimento sirve para estudiar la tasa de supervivencia en un ambiente controlado.
 
 ## Modelo Completamente Agrupado
 
@@ -553,13 +555,6 @@ p <- ggplot(df,
   geom_hline(yintercept = alpha_est, 
              linetype = "dashed", 
              color = "blue4") +
-  # annotate("text", 
-  #          x = max(df$index) - 23, 
-  #          y = alpha_est + 0.05, 
-  #          label = "Promedio de supervivencia en tanques", 
-  #          color = "black", 
-  #          fontface = "italic", 
-  #          hjust = 0) +  
   labs(x = "Tanque", 
        y = "Tasa de Supervivencia") +
   theme(
@@ -727,6 +722,325 @@ Pero podemos incluir intervalos de credibilidad para ver su comportamiento:
 #| warning: FALSE
 
 (p2/p3)
+```
+
+## Modelo Completo
+
+En los modelos anteriores no estamos incorporando todas las variables, y como lo que deseamos es estudiar el fenómeno, incluir todas las variables, dado nuestro DAG, puede mejorar la estimación de los efectos por variable. Podemos extender entonces la idea del Modelo Jerárquico e incorporar las otras variables. De tal modo que:
+
+```{r preparando_df}
+df <- df %>% 
+  mutate(pred_num=ifelse(pred=='no',0,1),
+         size_num=ifelse(size=='small',0,1)
+         ) 
+```
+
+```{stan output.var="m_4"}
+data {
+  int<lower=0> N;               // Número total de observaciones
+  int<lower=0> T;               // Número de tanques
+  int<lower=0> surv[N];         // renacuajos que sobrevivieron
+  int<lower=0> density[N];      // Densidad inicial de renacuajos
+  int<lower=1, upper=T> tank[N];// Índice del número de tanque
+  vector[N] pred;               // Presencia de depredadores (0 o 1)
+  vector[N] size;               // Tamaño de los renacuajos
+}
+
+parameters {
+  real<lower=0> alpha_bar;      // Promedio de alpha
+  real<lower=0> sigma_alpha;    // Desviación estándar de los alphas
+  vector[T] alpha_tank;         // Alpha para cada tanque
+  real bp;                      // Coeficiente para los depredadores
+  real bs;                      // Coeficiente para el tamaño de los renacuajos
+}
+
+model {
+  // Hyperpriors
+  alpha_bar ~ normal(0, 1.5);
+  sigma_alpha ~ exponential(1);
+
+  // Priors
+  alpha_tank ~ normal(alpha_bar, sigma_alpha);
+  bp ~ normal(-0.5, 1);
+  bs ~ normal(0, 1);  // Prior normal para el coeficiente de tamaño
+
+  // Modelo para cada observación
+  for (n in 1:N) {
+    real p = inv_logit(alpha_tank[tank[n]] + bp * pred[n] + bs * size[n]);
+    surv[n] ~ binomial(density[n], p);
+  }
+}
+
+generated quantities {
+  int surv_rep[N]; // Predicciones replicadas para la supervivencia
+
+  for (n in 1:N) {
+    surv_rep[n] = binomial_rng(density[n], inv_logit(alpha_tank[tank[n]] + bp * pred[n] + bs * size[n]));
+  }
+}
+
+```
+
+```{r ajuste_m4}
+#| echo: FALSE
+#| message: FALSE
+#| warning: FALSE
+
+dat <- list(
+  N = nrow(df),
+  "T" = max(df$tank),
+  surv = df$surv,
+  density = df$density,
+  tank = df$tank,
+  pred = df$pred_num,
+  size = df$size_num
+)
+
+fit4 <- rstan::sampling(m_4, 
+                 data = dat, 
+                 iter = 1000, 
+                 chains = 2, 
+                 cores = 2,
+                 refresh=0)
+```
+
+```{r tabla_m4}
+fit4_summary <- rstan::summary(fit4, 
+                               probs = c(0.025,
+                                         0.5,
+                                         0.975),
+                               pars=c('alpha_tank','lp__'))$summary 
+
+fit4_summary |> 
+  as.data.frame() |>
+  rownames_to_column("parameter") |>
+  select(parameter,mean, sd, "2.5%", "50%", "97.5%", n_eff, Rhat) |>
+  gt() |>
+  fmt_number()
+```
+
+Y podemos ver el comparativo entre las predicciones y los datos reales:
+
+```{r predictions_m4}
+#| echo: FALSE
+#| message: FALSE
+#| warning: FALSE
+
+post4 <- as.data.frame(fit4, pars = c('surv_rep'))
+df$urv_est4 <- post4 %>% colMeans
+df$propsurv_est4 <- df$urv_est4/df$density
+
+alpha4 <- as.data.frame(fit4, pars = c('alpha_tank')) 
+alpha_est4 <- alpha4$alpha %>% mean() %>% plogis
+
+# Create the scatterplot with annotations
+p <- ggplot(df, 
+            aes(x = index, 
+                y = propsurv_est4)) +
+  geom_point(data=df, 
+          aes(x = index, 
+              y = propsurv), color='grey')+
+  geom_point(color = 'green3') +
+  geom_hline(yintercept = alpha_est, 
+             linetype = "dashed", 
+             color = "blue4") +
+  labs(x = "Tanque", 
+       y = "Tasa de Supervivencia") +
+  theme(
+    axis.title.x = element_text(face = "italic"),
+    axis.title.y = element_text(face = "italic")
+  ) +
+  scale_x_continuous(breaks = c(8, 24, 40), 
+                     labels = c("1 <= Pequeño < 16", 
+                                "16 <= Mediano < 32", 
+                                "32 <= Grande < 48")) +
+  geom_vline(xintercept = 16, color = "cyan3")+
+  geom_vline(xintercept = 32, color = "cyan3")+
+  geom_vline(xintercept = 48, color = "cyan3")+
+  # ylim(0, 1) +
+  scale_y_continuous(labels = scales::percent_format())
+
+p
+
+```
+
+Pero podemos repetir igualmente el ejercicio anterior para comparar entre modelos:
+
+```{r tabla_aux4}
+#| echo: FALSE
+#| message: FALSE
+#| warning: FALSE
+
+aux4 <- post4 %>% 
+  pivot_longer(cols=1:ncol(post4), 
+               names_to="parameter", 
+               values_to="value") %>%
+  group_by(parameter) %>%
+  summarise(m4_q2_5=quantile(value, probs = 0.025),
+            m4_mean=mean(value, na.rm=T),
+            m4_q97_5=quantile(value, probs = 0.975)) %>% 
+  ungroup() %>% 
+  mutate(index=as.numeric(gsub("[^0-9]", "", parameter))) %>%
+  left_join(df %>% select(index, density), by="index") %>% 
+  mutate(m4_lower = m4_q2_5/density, 
+         m4_sup = m4_mean/density,
+         m4_upper = m4_q97_5/density)
+```
+
+```{r}
+p1<- ggplot(df, 
+       aes(x = index, 
+           y = propsurv_est3)) +
+  geom_point(data=df, 
+             aes(x = index, 
+                 y = propsurv), color='grey')+
+  geom_point(color = 'blue3') +
+  geom_point(aes(x=index, y=propsurv_est4), color='green3') +
+  geom_hline(yintercept = alpha_est, 
+             linetype = "dashed", 
+             color = "blue4") +
+  labs(x = "Tanque", 
+       y = "Tasa de Supervivencia",
+       title="Comparativo entre modelos",
+       subtitle="Jerárquico = azul, Completo=verde") +
+  theme(
+    axis.title.x = element_text(face = "italic"),
+    axis.title.y = element_text(face = "italic")) +
+  scale_x_continuous(breaks = c(8, 24, 40), 
+                     labels = c("1 <= Pequeño < 16", 
+                                "16 <= Mediano < 32", 
+                                "32 <= Grande < 48")) +
+  geom_vline(xintercept = 15.5, color = "cyan3")+
+  geom_vline(xintercept = 31.5, color = "cyan3")+
+  geom_vline(xintercept = 48.5, color = "cyan3")+
+  scale_y_continuous(labels = scales::percent_format())
+
+p3 <- ggplot(df, 
+       aes(x = index, 
+           y = propsurv_est3)) +
+  geom_point(data=df, 
+             aes(x = index, 
+                 y = propsurv), color='grey')+
+  geom_point(color = 'blue3') +
+  geom_segment(data=aux,
+               aes(x = index,
+                   xend = index,
+                   y = m3_lower,,
+                   yend = m3_upper),
+               color = "blue", alpha=0.2, linewidth = 1) +
+  geom_hline(yintercept = alpha_est, 
+             linetype = "dashed", 
+             color = "blue4") +
+  labs(x = "Tanque", 
+       y = "",
+       title="Modelo jerárquico") +
+  theme(
+    axis.title.x = element_text(face = "italic"),
+    axis.title.y = element_text(face = "italic")
+  ) +
+  scale_x_continuous(breaks = c(8, 24, 40), 
+                     labels = c("1 <= Pequeño < 16", 
+                                "16 <= Mediano < 32", 
+                                "32 <= Grande < 48")) +
+  geom_vline(xintercept = 15.5, color = "cyan3")+
+  geom_vline(xintercept = 31.5, color = "cyan3")+
+  geom_vline(xintercept = 48.5, color = "cyan3")+
+  scale_y_continuous(labels = scales::percent_format())
+
+p2 <- ggplot(df, 
+       aes(x = index, 
+           y = propsurv_est4)) +
+  geom_point(data=df, 
+             aes(x = index, 
+                 y = propsurv), color='grey')+
+  geom_point(color='green3') +
+  geom_segment(data=aux4,
+               aes(x = index,
+                   xend = index,
+                   y = m4_lower,,
+                   yend = m4_upper),
+               color = "green", alpha=0.2, linewidth = 1) +
+  geom_hline(yintercept = alpha_est, 
+             linetype = "dashed", 
+             color = "blue4") +
+  labs(x = "Tanque", 
+       y = "Tasa de Supervivencia",
+       title="Modelo completo") +
+  theme(
+    axis.title.x = element_text(face = "italic"),
+    axis.title.y = element_text(face = "italic")
+  ) +
+  scale_x_continuous(breaks = c(8, 24, 40), 
+                     labels = c("1 <= Pequeño < 16", 
+                                "16 <= Mediano < 32", 
+                                "32 <= Grande < 48")) +
+  geom_vline(xintercept = 15.5, color = "cyan3")+
+  geom_vline(xintercept = 31.5, color = "cyan3")+
+  geom_vline(xintercept = 48.5, color = "cyan3")+
+  scale_y_continuous(labels = scales::percent_format())
+
+p1
+```
+
+```{r}
+(p3/p2)
+```
+
+Y parece que algo empeoró en algunos casos, metimos más variables y parece que nos estamos alejando de los valores observados. Pero entendamos mejor qué está pasando
+
+```{r graf_rectangles}
+#| echo: FALSE
+#| warning: FALSE
+#| message: FALSE
+
+p4 <- ggplot(df, 
+       aes(x = index, 
+           y = propsurv_est3)) +
+  geom_rect(aes(xmin = 0, 
+                         xmax = 8.5, 
+                         ymin = 0, 
+                         ymax = 1),
+            fill = "lightblue", 
+            alpha = 0.01)+
+  geom_rect(aes(xmin = 16.5, 
+                         xmax = 24.5, 
+                         ymin = 0, 
+                         ymax = 1),
+            fill = "lightblue", 
+            alpha = 0.01)+
+  geom_rect(aes(xmin = 32.5, 
+                         xmax = 40.5, 
+                         ymin = 0, 
+                         ymax = 1),
+            fill = "lightblue", 
+            alpha = 0.01)+
+  geom_point(data=df, 
+             aes(x = index, 
+                 y = propsurv), color='grey')+
+  geom_point(color = 'blue3') +
+  geom_point(aes(x=index, y=propsurv_est4), color='green3') +
+  geom_hline(yintercept = alpha_est, 
+             linetype = "dashed", 
+             color = "blue4") +
+  labs(x = "Tanque", 
+       y = "Tasa de Supervivencia",
+       title="Comparativo entre modelos",
+       subtitle="Jerárquico = azul, Completo=verde, Zonas coloreadas = no pred") +
+  theme(
+    axis.title.x = element_text(face = "italic"),
+    axis.title.y = element_text(face = "italic")) +
+  scale_x_continuous(breaks = c(8, 24, 40), 
+                     labels = c("1 <= Pequeño < 16", 
+                                "16 <= Mediano < 32", 
+                                "32 <= Grande < 48")) +
+  geom_vline(xintercept = 15.5, color = "cyan3")+
+  geom_vline(xintercept = 31.5, color = "cyan3")+
+  geom_vline(xintercept = 48.5, color = "cyan3")+
+  scale_y_continuous(labels = scales::percent_format())
+
+  
+
+p4
 ```
 
 ## Anexos {#sec-anexos}
