@@ -230,9 +230,9 @@ dat <- list(
 
 fit1 <- rstan::sampling(m_1, 
                  data = dat, 
-                 iter = 1000, 
-                 chains = 2, 
-                 cores = 2,
+                 iter = 2000, 
+                 chains = 4, 
+                 cores = 4,
                  refresh=0)
 ```
 
@@ -360,9 +360,9 @@ dat <- list(
 
 fit2 <- rstan::sampling(m_2, 
                  data = dat, 
-                 iter = 1000, 
-                 chains = 2, 
-                 cores = 2,
+                 iter = 2000, 
+                 chains = 4, 
+                 cores = 4,
                  refresh=0)
 ```
 
@@ -494,9 +494,9 @@ dat <- list(
 
 fit3 <- rstan::sampling(m_3, 
                  data = dat, 
-                 iter = 1000, 
-                 chains = 2, 
-                 cores = 2,
+                 iter = 2000, 
+                 chains = 4, 
+                 cores = 4,
                  refresh=0)
 ```
 
@@ -831,9 +831,9 @@ dat <- list(
 
 fit4 <- rstan::sampling(m_4, 
                  data = dat, 
-                 iter = 1000, 
-                 chains = 2, 
-                 cores = 2,
+                 iter = 2000, 
+                 chains = 4, 
+                 cores = 4,
                  refresh=0)
 ```
 
