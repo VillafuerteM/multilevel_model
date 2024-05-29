@@ -5,7 +5,7 @@ editor: visual
 authors:
   - "Mario Medina - 156940"
   - "Mariano Villafuerte - 156057"
-  - "José Eduardo Gutierrez - 311681868"
+  - "José Eduardo Gutierrez - 208307"
 format: 
     html:
       toc: TRUE
@@ -1118,6 +1118,8 @@ p4
 
 Parece ser que en las aquellos tanques donde no hay presencia de depredadores (sombredos) nuestras predicciones se acercaron más a los valores observados, pero lo contrario pasa cuando hay presencia de depredadores.
 
+## Conclusión
+
 ## Anexos {#sec-anexos}
 
 ### Rethinking y sus datos {#sec-rethinking-y-sus-datos}
@@ -1233,10 +1235,6 @@ print(paste0("Parámetro de sigma: exp("
 ```
 
 ```{r}
-#| echo: FALSE
-#| warning: FALSE
-#| message: FALSE
-
 alpha_tank <- c()
 prob_vector <- c()
 for (i in 1:10000) {
@@ -1249,10 +1247,6 @@ quantile(prob_vector, probs = c(0.01,0.02,0.03,0.97,0.98,0.99))
 Ahora construimos nuestro modelo generativo y examinamos sus consecuencias. Simularemos 1500 repeticiones de las 48 observaciones que esperamos:
 
 ```{r}
-#| echo: FALSE
-#| warning: FALSE
-#| message: FALSE
-
 T <- 48
 D <- df$density
 R <- 1500
@@ -1260,10 +1254,6 @@ sim_datos <- list(T = T, D = D)
 ```
 
 ```{r}
-#| echo: FALSE
-#| warning: FALSE
-#| message: FALSE
-
 df_apriori <- c()
 for (i in 1:R) {
   tanke <- c()
@@ -1296,10 +1286,6 @@ for (i in 1:R) {
 Simulamos de la apriori y algunas posibles configuraciones que esperaríamos ver. Hacen sentido? pareciera que sí, al compararlo los estanques grandes tienen tasas de supervivencia más bajas, lo que sin ver los datos podríamos suponer que esto permite que haya más depredadores por ejemplo. Aunque el modelo no tenga la variable, estos son muy útiles debido a que ya lleva el assumption de tener comportamientos diferentes por cada grupo.
 
 ```{r}
-#| echo: FALSE
-#| warning: FALSE
-#| message: FALSE
-
 df_apriori$draw <- rep(1:R, each = T)
 a<-ggplot(df_apriori %>% filter(draw <= 5), aes(x = survival_rate)) +
   geom_histogram(bins = 30) +
@@ -1311,10 +1297,6 @@ a
 ```
 
 ```{r}
-#| echo: FALSE
-#| warning: FALSE
-#| message: FALSE
-
 df_apriori <- dplyr::mutate(
   df_apriori, g_survival_rate = round(survival_rate,2))
 
@@ -1378,10 +1360,6 @@ generated quantities {
 ```
 
 ```{r ajuste_posterior}
-#| echo: FALSE
-#| message: FALSE
-#| warning: FALSE
-
 dat <- list(
   "T" = max(df$tank),
   S = df$surv,
@@ -1401,10 +1379,6 @@ Para considerar que estamos haciendo un modelo que aprenda de diferentes grupos 
 No hay un desajuste tan claro en el modelo para ninguno de los casos. Tal vez viéndolo a total podríamos regresar al análisis conceptual y determinar si hay algo en el proceso generador de datos que no estamos considerando.
 
 ```{r}
-#| echo: FALSE
-#| warning: FALSE
-#| message: FALSE
-
 sims_tbl  <- as.data.frame(fit_posterior, pars = c('S_rep'))
 
 obs_post_tbl <-  sims_tbl |> 
@@ -1443,7 +1417,7 @@ ggplot(obs_post_tbl |>
   facet_wrap(~draw) + theme_bw()
 ```
 
-**Primer tamaño**
+**Tamaño Chico**
 
 ```{r}
 #| echo: FALSE
@@ -1463,6 +1437,8 @@ ggplot(obs_post_tbl |>
   facet_wrap(~draw) + theme_bw()
 ```
 
+**Tamaño Mediano**
+
 ```{r}
 #| echo: FALSE
 #| warning: FALSE
@@ -1480,6 +1456,8 @@ ggplot(obs_post_tbl |>
   geom_histogram(bins = 10) +
   facet_wrap(~draw) + theme_bw()
 ```
+
+**Tamaño Grande**
 
 ```{r}
 #| echo: FALSE
