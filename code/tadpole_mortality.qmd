@@ -43,6 +43,8 @@ library(rstan)
 library(scales)
 library(shape)
 library(tidyverse)
+library(optimx) # NUEVA
+library(kableExtra) # NUEVA
 
 # configuracion de ggplot ----
 theme_set(theme_minimal())
@@ -121,7 +123,7 @@ p <- ggplot(df,
 p
 ```
 
-Hay mucha variación en estos datos. Parte de la variación proviene del tratamiento experimental, pero mucha también proviene de otras fuentes. Pensemos en cada fila como un “tanque,” un entorno experimental que contiene renacuajos. Hay muchas cosas peculiares de cada tanque que no se miden, y estos factores no medidos crean variación en la supervivencia entre tanques, incluso cuando todas las variables predictoras tienen el mismo valor. Se realizan múltiples observaciones, en este caso los renacuajos, dentro de cada grupo.
+Hay mucha variación en estos datos. Parte de la variación proviene del tratamiento experimental, pero mucha también proviene de otras fuentes. Pensemos en cada fila como un "tanque," un entorno experimental que contiene renacuajos. Hay muchas cosas peculiares de cada tanque que no se miden, y estos factores no medidos crean variación en la supervivencia entre tanques, incluso cuando todas las variables predictoras tienen el mismo valor. Se realizan múltiples observaciones, en este caso los renacuajos, dentro de cada grupo.
 
 Tenemos medidas repetidas y heterogeneidad entre grupos. Si ignoramos los grupos, asignando el mismo intercepto a cada uno de ellos, corremos el riesgo de ignorar una variación importante en la supervivencia. Esta variación podría enmascarar la asociación con otras variables. Si en su lugar estimamos un intercepto único para cada grupo, utilizando una variable dummy para cada tanque, estaríamos practicando una especie de amnesia. Después de todo, los tanques son diferentes, pero cada tanque nos ayuda a estimar la supervivencia en los otros tanques. Por lo tanto, no tiene sentido olvidar por completo, pasando de un tanque a otro.
 
@@ -1114,6 +1116,282 @@ p4
 ```
 
 Parece ser que en las aquellos tanques donde no hay presencia de depredadores (sombredos) nuestras predicciones se acercaron más a los valores observados, pero lo contrario pasa cuando hay presencia de depredadores.
+
+## Diagnósticos
+
+### Chequeos a priori
+
+Para poner una inicial necesitamos conocimiento de dominio, sabemos que al estar hablando de un experimento controlado, diferente a una situación natural, los tanques no tienen más de 35 *reedfrogs*. Será extremo obtener una tasa de supervivencia menor al 3% (1 de los 35) y sabemos que puede existir valores por encima de 97% (34 de 35) sin embargo también se espera que no sean los más.
+
+Proponemos nuestra propio modelo de optimización "valudación cruzada" para encontrar los hiperapriori
+
+```{r}
+set.seed(987)
+p1_values <- seq(-3, 3, length.out = 100)  # media de alpha_bar
+p2_values <- seq(0.1, 5, length.out = 100)  # desviación estándar de alpha_bar
+p3_values <- seq(0.1, 5, length.out = 100)  # parámetro de sigma_alpha
+
+inv_logit <- function(x) {
+  1 / (1 + exp(-x))
+}
+
+evaluate_quartiles <- function(p1, p2, p3, n_sim = 10000) {
+  alpha_bar <- rnorm(n_sim, p1, p2)
+  sigma_alpha <- rexp(n_sim, rate = p3)
+  alpha_tank <- rnorm(n_sim, alpha_bar, sigma_alpha)
+  probabilities <- inv_logit(alpha_tank)
+  q01 <- quantile(probabilities, 0.01)
+  q99 <- quantile(probabilities, 0.99)
+  return(c(q01, q99))
+}
+
+target_q01 <- 0.03
+target_q99 <- 0.97
+
+cost_function <- function(params) {
+  p1 <- params[1]
+  p2 <- params[2]
+  p3 <- params[3]
+  quartiles <- evaluate_quartiles(p1, p2, p3)
+  q01 <- quartiles[1]
+  q99 <- quartiles[2]
+  return((q01 - target_q01)^2 + (q99 - target_q99)^2)
+}
+
+opt_results <- optimx(c(0, 1, 1), cost_function, 
+                      lower = c(-3, 0.1, 0.1), 
+                      upper = c(3, 5, 5), 
+                      method = "L-BFGS-B")
+
+par1 <- opt_results$p1
+par2 <- opt_results$p2
+par3 <- opt_results$p3
+print(paste0("Parámetros de Miu: norm(",round(par1,2),",",round(par2,2),")"))
+print(paste0("Parámetro de sigma: exp(",round(par3,2),")"))
+```
+
+```{r}
+alpha_tank <- c()
+prob_vector <- c()
+for (i in 1:10000) {
+  alpha_tank[i] = rnorm(1, rnorm(1,par1,par2), rexp(1,par3))
+  prob_vector[i] = inv_logit(alpha_tank[i])
+}
+quantile(prob_vector, probs = c(0.01,0.02,0.03,0.97,0.98,0.99))
+```
+
+Ahora construimos nuestro modelo generativo y examinamos sus consecuencias. Simularemos 1500 repeticiones de las 48 observaciones que esperamos:
+
+```{r}
+T <- 48
+D <- df$density
+R <- 1500
+sim_datos <- list(T = T, D = D)
+```
+
+```{r}
+df_apriori <- c()
+for (i in 1:R) {
+  tanke <- c()
+  density <- c()
+  mu_alpha <- c()
+  sigma_alpha <- c()
+  alpha_tank <- c()
+  survival_rate <- c()
+  survival_abs <- c()
+  for (j in 1:T) {
+    tanke[j] = j
+    density[j] = D[j]
+    mu_alpha[j] = rnorm(1,par1,par2)
+    sigma_alpha[j] = rexp(1,par3)
+    alpha_tank[j] = rnorm(1,mu_alpha[j],sigma_alpha[j])
+    survival_rate[j] = inv_logit(alpha_tank[j])
+    survival_abs[j] = rbinom(1, density[j], survival_rate[j])
+  }
+  df_rep <- data.frame(
+    tanke = tanke,
+    density = density, 
+    alpha_tank = alpha_tank,
+    survival_rate = survival_rate, 
+    survival_abs = survival_abs
+  )
+  df_apriori <- rbind(df_apriori, df_rep)
+}
+```
+
+Simulamos de la apriori y algunas posibles configuraciones que esperaríamos ver. Hacen sentido? pareciera que sí, al compararlo los estanques grandes tienen tasas de supervivencia más bajas, lo que sin ver los datos podríamos suponer que esto permite que haya más depredadores por ejemplo. Aunque el modelo no tenga la variable, estos son muy útiles debido a que ya lleva el assumption de tener comportamientos diferentes por cada grupo. 
+
+```{r}
+df_apriori$draw <- rep(1:R, each = T)
+a<-ggplot(df_apriori %>% filter(draw <= 5), aes(x = survival_rate)) +
+  geom_histogram(bins = 30) +
+  facet_wrap(~density) +
+  labs(subtitle = "Simulaciones de observaciones a priori") +
+  theme_bw()
+a
+```
+
+```{r}
+df_apriori <- dplyr::mutate(
+  df_apriori, g_survival_rate = round(survival_rate,2))
+
+ggplot(df_apriori |> group_by(draw, survival_abs) |> count() |> 
+         group_by(survival_abs) |> 
+         summarise(mediana = median(n), 
+                   q_10 = quantile(n, 0.1), 
+                   q90 = quantile(n, 0.9)) |> 
+         pivot_longer(cols = c(mediana, q_10, q90), names_to = "tipo", values_to = "resumen"),
+  aes(x = survival_abs)) +
+  geom_line(aes(y = resumen, group = tipo)) +
+  labs(subtitle = "Simulaciones de observaciones a priori")
+```
+
+Observamos que efectivamente que es **muy poco probable que haya tasas de supervivencia menores al 3% y mayores al 97%** y además está contenido dentro de los valores que tendrá el experimento (e.g, no más de 35 reed frogs)
+
+```{r}
+kable(df_apriori |> 
+  mutate(menor_03 = survival_rate < 1/35, mayor_97 = survival_rate > 34/35) |> 
+  summarise(menor_03 = mean(menor_03), mayor_97 = mean(mayor_97)))
+```
+
+## Chequeos posterior
+
+```{stan output.var="posterior"}
+data {
+  int<lower=0> T;         // Num de tanques
+  int<lower=0> S[T];      // Num de renacuajos que sobrevivieron
+  int<lower=0> D[T];      // Densidad inicial
+}
+
+parameters {
+  real<lower=0> alpha_bar;        // Promedio del alpha
+  real<lower=0> sigma_alpha;      // Desv est de los alphas
+  vector[T] alpha_tank;           // Alpha de cada tanque
+}
+
+model {
+  // Hyperpriors 
+  alpha_bar ~ normal(-0.02, 1.05);
+  sigma_alpha ~ exponential(1.07);
+  // Priors
+  alpha_tank ~ normal(alpha_bar, sigma_alpha);
+
+  for (t in 1:T) {
+    S[t] ~ binomial(D[t], inv_logit(alpha_tank[t]));
+  }
+}
+
+generated quantities {
+  int S_rep[T]; 
+
+  for (t in 1:T) {
+    S_rep[t] = binomial_rng(D[t], inv_logit(alpha_tank[t]));
+  }
+}
+```
+
+```{r ajuste_posterior}
+#| echo: FALSE
+#| message: FALSE
+#| warning: FALSE
+
+dat <- list(
+  "T" = max(df$tank),
+  S = df$surv,
+  D = df$density
+)
+
+fit_posterior <- rstan::sampling(posterior, 
+                 data = dat, 
+                 iter = 1500, 
+                 chains = 2, 
+                 cores = 2,
+                 refresh=0)
+```
+
+Para considerar que estamos haciendo un modelo que aprenda de diferentes grupos las validaciones de la posterior las realizaremos por tamaño de tanque.
+
+No hay un desajuste tan claro en el modelo para ninguno de los casos. Tal vez viéndolo a total podríamos regresar al análisis conceptual y determinar si hay algo en el proceso generador de datos que no estamos considerando. 
+
+```{r}
+sims_tbl  <- as.data.frame(fit_posterior, pars = c('S_rep'))
+
+obs_post_tbl <-  sims_tbl |> 
+  as_tibble() |>
+  pivot_longer(cols = starts_with("S_rep"), 
+               names_to = "y", 
+               values_to = "valor") %>%
+  separate(y, into = c("prefix", "tank"), sep = "\\[", remove = FALSE) %>%
+  mutate(tank = as.numeric(gsub("\\]", "", tank)))
+
+
+obs_post_tbl$draw <- rep(1:1500, each = 48)
+
+obs_post_tbl <- 
+  left_join(obs_post_tbl,
+            df, by = "tank") %>%
+  dplyr::mutate(., surv_rate = valor/density)
+```
+
+**TODOS**
+
+```{r}
+ggplot(obs_post_tbl |> 
+         filter(draw <= 10) |>
+         select(draw, surv_rate) |>
+         bind_rows(df |> 
+                     rename(surv_rate = propsurv) |>
+                     mutate(draw = 11) |>
+                     select(draw, surv_rate)), 
+       aes(x = surv_rate)) +
+  geom_histogram(bins = 10) +
+  facet_wrap(~draw) + theme_bw()
+```
+
+**Primer tamaño**
+
+```{r}
+ggplot(obs_post_tbl |> 
+         filter(draw <= 10, density == 10) |>
+         select(draw, surv_rate) |>
+         bind_rows(df |> 
+                     filter(density == 10) |>
+                     rename(surv_rate = propsurv) |>
+                     mutate(draw = 11) |>
+                     select(draw, surv_rate)), 
+       aes(x = surv_rate)) +
+  geom_histogram(bins = 10) +
+  facet_wrap(~draw) + theme_bw()
+```
+
+```{r}
+ggplot(obs_post_tbl |> 
+         filter(draw <= 10, density == 25) |>
+         select(draw, surv_rate) |>
+         bind_rows(df |> 
+                     filter(density == 25) |>
+                     rename(surv_rate = propsurv) |>
+                     mutate(draw = 11) |>
+                     select(draw, surv_rate)), 
+       aes(x = surv_rate)) +
+  geom_histogram(bins = 10) +
+  facet_wrap(~draw) + theme_bw()
+```
+
+```{r}
+ggplot(obs_post_tbl |> 
+         filter(draw <= 10, density == 35) |>
+         select(draw, surv_rate) |>
+         bind_rows(df |> 
+                     filter(density == 35) |>
+                     rename(surv_rate = propsurv) |>
+                     mutate(draw = 11) |>
+                     select(draw, surv_rate)), 
+       aes(x = surv_rate)) +
+  geom_histogram(bins = 10) +
+  facet_wrap(~draw) + theme_bw()
+```
+
 
 ## Anexos {#sec-anexos}
 
