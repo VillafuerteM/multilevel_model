@@ -1,0 +1,53 @@
+Hola
+somos tales
+nosotros exponemos el problema de supervivencia de renacuajos
+Problema propuesto por estos weyes 
+y estudiado en el libro de statistical rethinking de mcelreath
+
+El objetivo de nuestro proyecto era entender las ventajas de un modelo jerárquico. 
+
+Para este proyecto tenemos disponibles 5 variables
+**procede a leer la tabla de variables
+
+Para ver las ventajas de un modelo jerárquico, primero hicimos un modelo en el que consideramos qie
+- todos los tanques tienen una misma tasa de supervivencia
+- Este modelo es cero flexible y, si vemos la gráfica de las predicciones vs los datos observados
+  vemos que no se adapta a la experiencia de algún tanque y ajustamos a la media a lo largo de los tanques
+
+El enfoque completamente contrario es un modelo en el que cada tanque tiene su tasa. 
+Este modelo es altamente flexible pero puede llevar 
+a sobreajustes, pero lo podemos controlar con los priors. 
+Si vemos los resultados de este modelo, vemos que las predicciones vemos como cada predicción se adapta más
+a lo que vemos en cada tanque
+
+El punto medio es el enfoque del modelo jerárquico, EN este caso, cada tanque tiene su tasa, sin embargo las alfas provienen
+de una distribucion comun. Esto nos ayuda a controlar o ser más escepticos en tanques con menos variables
+Podemos graficar las predicciones, pero a simple vista no se ve la diferencia
+
+Asi que podemos ver el comparativo e incluimos los intervalos de credibilidad
+Con este comparativo observamos:
+- en tanques con mucha información nuestra estimación realmente no cambia,
+- en tanques pequeños, a falta de información, aprendemos de la experiencia de otros tanques
+- por ejemplo veamos este punto que esta aca abajo
+	en ese caso, el modelo no agrupado sobreajusta al valor observado, 
+	mientras que el modelo jerárquico es más esceptico y "aprende" que la tasa no es tan baja realmente, 
+	y lo acerca a la media de los tanques
+
+
+McElreath se detiene en este punto, sin embargo, hace falta incorporar a las otras variables.
+Nosotros proponemos incorporar dos dummies, una para la presencia de depredadores (1= hay depredadores)
+y otra dummy para el tamaño de los renacuajos (1=grandes los weyes)
+
+Esto, dado nuestro DAG nos puede ayudar a estimar mejor el efecto de cada una de las variables y no atribuirle
+efectos de una variable a otra.
+Si corremos el modelo, podemos repetir el ejercicio de comparar contra los valores observados
+Y podemos comparar contra el modelo jerárquico base
+Pareciera que en algunos lados nos alejamos más de los datos observados, pero podemos entender un poco más 
+de lo que está pasando si... seccionamos por la presencia de depredadores. Si esta sombreado es porque NO hay depredadores
+Y vemos que en los lugares que no hay depredadores, las predicciones se acercan más a los valores observados, mientras que
+en los tanques con presencia de depredadores, tenemos mayor variabilidad. 
+Esto se puede deber a que los tanques sin depredadores tienen una menor dispersión que aquellos que sí lo tienen. Y falta
+estudiar el efecto del tamaño o incluso de la interacción entre el tamaño y los depredadores. 
+
+Conclusiones
+pos las leen
