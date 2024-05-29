@@ -1,15 +1,23 @@
 Hola
-somos tales
-nosotros exponemos el problema de supervivencia de renacuajos
-Problema propuesto por estos weyes 
-y estudiado en el libro de statistical rethinking de mcelreath
+Mario Medina,
+Mariano Villafuerte 
+y yo Jose Eduardo Gutierrez
+
+nosotros vamos a exponer el problema de supervivencia de renacuajos
+este Problema fue  propuesto por  Vonesh y Bolker en 2005
+y es estudiado en el libro de statistical rethinking de mcelreath, en específico, en el capítulo 13.
 
 El objetivo de nuestro proyecto era entender las ventajas de un modelo jerárquico. 
 
 Para este proyecto tenemos disponibles 5 variables
-**procede a leer la tabla de variables
+Variable	Descripción
+density		Densidad inicial de renacuajos
+pred		Factor indicador de presencia de depredadores
+size		Factor del tamaño de los renacuajos
+surv		Número de renacuajos que sobrevivieron
+propsurv	Proporción de supervivencia
 
-Para ver las ventajas de un modelo jerárquico, primero hicimos un modelo en el que consideramos qie
+Para ver las ventajas de un modelo jerárquico, primero hicimos un modelo en el que consideramos que
 - todos los tanques tienen una misma tasa de supervivencia
 - Este modelo es cero flexible y, si vemos la gráfica de las predicciones vs los datos observados
   vemos que no se adapta a la experiencia de algún tanque y ajustamos a la media a lo largo de los tanques
@@ -36,7 +44,7 @@ Con este comparativo observamos:
 
 McElreath se detiene en este punto, sin embargo, hace falta incorporar a las otras variables.
 Nosotros proponemos incorporar dos dummies, una para la presencia de depredadores (1= hay depredadores)
-y otra dummy para el tamaño de los renacuajos (1=grandes los weyes)
+y otra dummy para el tamaño de los renacuajos (1=grandes los renacuajos)
 
 Esto, dado nuestro DAG nos puede ayudar a estimar mejor el efecto de cada una de las variables y no atribuirle
 efectos de una variable a otra.
@@ -49,5 +57,20 @@ en los tanques con presencia de depredadores, tenemos mayor variabilidad.
 Esto se puede deber a que los tanques sin depredadores tienen una menor dispersión que aquellos que sí lo tienen. Y falta
 estudiar el efecto del tamaño o incluso de la interacción entre el tamaño y los depredadores. 
 
+
 Conclusiones
-pos las leen
+- Un modelo jerárquico nos da la flexibilidad de aprender de cada tanque, 
+pero nos ayuda a regularizar en aquellas observaciones sin tanta información, 
+aprendiendo del resto de los tanques.
+
+- Contraintuitivamente, si analizamos el último modelo, los renacuajos pequeños sobreviven mejor. 
+Esta es una de las conclusiones del paper original.
+
+- Parece haber un efecto de habituación o de estrategias defensivas efectivas entre los renacuajos. 
+Además, la densidad inicial parece jugar un rol crítico, con densidades más altas posiblemente 
+conduciendo a un menor éxito de supervivencia debido a la competencia intraespecífica 
+o a una mayor visibilidad para los depredadores.
+
+- La presencia de depredadores aumenta la variabilidad de la tasa de supervivencia.
+
+- Las distribuciones iniciales pueden servir como regularizadores.
