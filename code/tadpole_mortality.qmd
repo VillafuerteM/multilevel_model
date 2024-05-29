@@ -309,7 +309,7 @@ $$ S_i \sim \textrm{Binomial}(D_i,p_i) $$
 
 $$ \textrm{logit}(p_i) = \alpha_i $$
 
-$$ \alpha_i = \textrm{Normal}(0, 1.5) $$
+$$ \alpha_i = \textrm{Normal}(0, 1.5)$$
 
 Lo cual se traduce en el siguiente código de Stan:
 
@@ -410,13 +410,6 @@ p <- ggplot(df,
   geom_hline(yintercept = alpha_est, 
              linetype = "dashed", 
              color = "blue4") +
-  # annotate("text", 
-  #          x = max(df$index) - 23, 
-  #          y = alpha_est + 0.05, 
-  #          label = "Promedio de supervivencia en tanques", 
-  #          color = "black", 
-  #          fontface = "italic", 
-  #          hjust = 0) +  
   labs(x = "Tanque", 
        y = "Tasa de Supervivencia") +
   theme(
@@ -430,7 +423,6 @@ p <- ggplot(df,
   geom_vline(xintercept = 16, color = "cyan3")+
   geom_vline(xintercept = 32, color = "cyan3")+
   geom_vline(xintercept = 48, color = "cyan3")+
-  # ylim(0, 1) +
   scale_y_continuous(labels = scales::percent_format())
 
 p
@@ -438,7 +430,7 @@ p
 
 ## Modelo Parcialmente Agrupado
 
-Pero igualmente se puede optar por un modelo parcialmente agrupado. En este caso, se agregan dos parámetros: $\bar{\alpha}$ y $\sigma$, los cuáles llamaremos hiperparámetros desde este punto. El punto es que, en el modelo anterior, todas las $\alpha_i$ se distribuían Normal con una media y desviación estándar establecida. Con esta modificación, los $\alpha_i$ comparten una misma distribución, lo que le permite transmitir información entre tanques al modelo.
+Pero igualmente se puede optar por un modelo parcialmente agrupado. En este caso, se agregan dos parámetros: $\mu$ y $\sigma$, los cuáles llamaremos hiperparámetros desde este punto. El punto es que, en el modelo anterior, todas las $\alpha_i$ se distribuían Normal con una media y desviación estándar establecida. Con esta modificación, los $\alpha_i$ comparten una misma distribución, lo que le permite transmitir información entre tanques al modelo.
 
 El modelo se ve así:
 
@@ -1119,6 +1111,16 @@ p4
 Parece ser que en las aquellos tanques donde no hay presencia de depredadores (sombredos) nuestras predicciones se acercaron más a los valores observados, pero lo contrario pasa cuando hay presencia de depredadores.
 
 ## Conclusión
+
+-   Un modelo jerárquico nos da la flexibilidad de aprender de cada tanque, pero nos ayuda a regularizar en aquellas observaciones sin tanta información, aprendiendo del resto de los tanques.
+
+-   Contraintuitivamente, si analizamos el último modelo, los renacuajos pequeños sobreviven mejor. Esta es una de las conclusiones del paper original.
+
+-   Parece haber un efecto de habituación o de estrategias defensivas efectivas entre los renacuajos. Además, la densidad inicial parece jugar un rol crítico, con densidades más altas posiblemente conduciendo a un menor éxito de supervivencia debido a la competencia intraespecífica o a una mayor visibilidad para los depredadores.
+
+-   La presencia de depredadores aumenta la variabilidad de la tasa de supervivencia.
+
+-   Las distribuciones iniciales pueden servir como regularizadores.
 
 ## Anexos {#sec-anexos}
 
