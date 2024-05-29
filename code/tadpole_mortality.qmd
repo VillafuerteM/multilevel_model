@@ -4,8 +4,8 @@ subtitle: "Métodos Analíticos"
 editor: visual
 authors:
   - "Mario Medina - 156940"
-  - "José Eduardo Gutierrez - 311681868"
   - "Mariano Villafuerte - 156057"
+  - "José Eduardo Gutierrez - 311681868"
 format: 
     html:
       toc: TRUE
@@ -31,6 +31,7 @@ knitr::opts_chunk$set(cache = TRUE)
 
 # librerias ----
 # library(cmdstanr)
+library(bayesplot)
 library(coda)
 library(dagitty)
 library(DiagrammeR)
@@ -1117,19 +1118,67 @@ p4
 
 Parece ser que en las aquellos tanques donde no hay presencia de depredadores (sombredos) nuestras predicciones se acercaron más a los valores observados, pero lo contrario pasa cuando hay presencia de depredadores.
 
-## Diagnósticos
+## Anexos {#sec-anexos}
 
-### Chequeos a priori
+### Rethinking y sus datos {#sec-rethinking-y-sus-datos}
 
-Para poner una inicial necesitamos conocimiento de dominio, sabemos que al estar hablando de un experimento controlado, diferente a una situación natural, los tanques no tienen más de 35 *reedfrogs*. Será extremo obtener una tasa de supervivencia menor al 3% (1 de los 35) y sabemos que puede existir valores por encima de 97% (34 de 35) sin embargo también se espera que no sean los más.
+Para instalar la librería de *rethinking*, se pueden seguir las instrucciones del repositorio de McElreath, disponible en este [link](https://github.com/rmcelreath/rethinking "Repositorio de rethinking").
 
-Proponemos nuestra propio modelo de optimización "valudación cruzada" para encontrar los hiperapriori
+Una vez instalada la librería y sus dependencias, los datos de *reedfrogs* se pueden obtener corriendo el siguiente código
+
+```{r anexo1_cargarDatos, eval=FALSE}
+library(rethinking)
+data(reedfrogs)
+```
+
+### Diagnósticos
+
+#### Diagnósticos de convergencia
+
+```{r}
+posterior_samples <- As.mcmc.list(fit3)
+mcmc_trace(posterior_samples, pars = c("mu_alpha","sigma_alpha", "alpha_tank[1]"))
+```
+
+```{r}
+fit3_diagnosticos <- rstan::summary(fit3, 
+                               probs = c(0.025,
+                                         0.5,
+                                         0.975),
+                               pars=c('mu_alpha','sigma_alpha'))$summary 
+
+fit3_diagnosticos |> 
+  as.data.frame() |>
+  rownames_to_column("parameter") |>
+  select(parameter,mean, sd, "2.5%", "50%", "97.5%", n_eff, Rhat) |>
+  gt() |>
+  fmt_number()
+```
+
+```{r}
+summary_fit3 <- summary(fit3)
+rhats <- summary_fit3$summary[, "Rhat"]
+names(rhats) <- rownames(summary_fit3$summary)
+
+color_scheme_set("brightblue")
+
+mcmc_rhat(rhats)+ ggtitle("R hat para todos los parámetros del modelo")
+
+```
+
+Observamos que las cadenas se ven bien mezcladas, y esto a su vez se refleja en un Rhat muy cercana a 1 para todos los parametros y un buen numero effectivo de muestras.
+
+#### Chequeos a priori
+
+Para poner una inicial necesitamos conocimiento de dominio, sabemos que al estar hablando de un experimento controlado, diferente a una situación natural, los tanques no tienen más de 35 *reedfrogs*. Será extremo obtener una tasa de supervivencia menor al 3% (1 de los 35) y sabemos que puede existir valores por encima de 97% (34 de 35) sin embargo también se espera que no sean los menos.
+
+Proponemos nuestro modelo de optimización "validación cruzada" para encontrar los hiperapriori
 
 ```{r}
 set.seed(987)
-p1_values <- seq(-3, 3, length.out = 100)  # media de alpha_bar
-p2_values <- seq(0.1, 5, length.out = 100)  # desviación estándar de alpha_bar
-p3_values <- seq(0.1, 5, length.out = 100)  # parámetro de sigma_alpha
+p1_values <- seq(-3, 3, length.out = 100)  # media de mu
+p2_values <- seq(0.1, 5, length.out = 100)  # desv est de mu
+p3_values <- seq(0.1, 5, length.out = 100)  # parám de sigma_alpha
 
 inv_logit <- function(x) {
   1 / (1 + exp(-x))
@@ -1166,11 +1215,28 @@ opt_results <- optimx(c(0, 1, 1), cost_function,
 par1 <- opt_results$p1
 par2 <- opt_results$p2
 par3 <- opt_results$p3
-print(paste0("Parámetros de Miu: norm(",round(par1,2),",",round(par2,2),")"))
-print(paste0("Parámetro de sigma: exp(",round(par3,2),")"))
 ```
 
 ```{r}
+#| echo: FALSE
+#| warning: FALSE
+#| message: FALSE
+
+print(paste0("Parámetros de Miu: norm(",
+             round(par1,2),
+             ",",
+             round(par2,2),")"))
+
+print(paste0("Parámetro de sigma: exp("
+             ,round(par3,2)
+             ,")"))
+```
+
+```{r}
+#| echo: FALSE
+#| warning: FALSE
+#| message: FALSE
+
 alpha_tank <- c()
 prob_vector <- c()
 for (i in 1:10000) {
@@ -1183,6 +1249,10 @@ quantile(prob_vector, probs = c(0.01,0.02,0.03,0.97,0.98,0.99))
 Ahora construimos nuestro modelo generativo y examinamos sus consecuencias. Simularemos 1500 repeticiones de las 48 observaciones que esperamos:
 
 ```{r}
+#| echo: FALSE
+#| warning: FALSE
+#| message: FALSE
+
 T <- 48
 D <- df$density
 R <- 1500
@@ -1190,6 +1260,10 @@ sim_datos <- list(T = T, D = D)
 ```
 
 ```{r}
+#| echo: FALSE
+#| warning: FALSE
+#| message: FALSE
+
 df_apriori <- c()
 for (i in 1:R) {
   tanke <- c()
@@ -1219,19 +1293,28 @@ for (i in 1:R) {
 }
 ```
 
-Simulamos de la apriori y algunas posibles configuraciones que esperaríamos ver. Hacen sentido? pareciera que sí, al compararlo los estanques grandes tienen tasas de supervivencia más bajas, lo que sin ver los datos podríamos suponer que esto permite que haya más depredadores por ejemplo. Aunque el modelo no tenga la variable, estos son muy útiles debido a que ya lleva el assumption de tener comportamientos diferentes por cada grupo. 
+Simulamos de la apriori y algunas posibles configuraciones que esperaríamos ver. Hacen sentido? pareciera que sí, al compararlo los estanques grandes tienen tasas de supervivencia más bajas, lo que sin ver los datos podríamos suponer que esto permite que haya más depredadores por ejemplo. Aunque el modelo no tenga la variable, estos son muy útiles debido a que ya lleva el assumption de tener comportamientos diferentes por cada grupo.
 
 ```{r}
+#| echo: FALSE
+#| warning: FALSE
+#| message: FALSE
+
 df_apriori$draw <- rep(1:R, each = T)
 a<-ggplot(df_apriori %>% filter(draw <= 5), aes(x = survival_rate)) +
   geom_histogram(bins = 30) +
   facet_wrap(~density) +
   labs(subtitle = "Simulaciones de observaciones a priori") +
   theme_bw()
+
 a
 ```
 
 ```{r}
+#| echo: FALSE
+#| warning: FALSE
+#| message: FALSE
+
 df_apriori <- dplyr::mutate(
   df_apriori, g_survival_rate = round(survival_rate,2))
 
@@ -1249,12 +1332,16 @@ ggplot(df_apriori |> group_by(draw, survival_abs) |> count() |>
 Observamos que efectivamente que es **muy poco probable que haya tasas de supervivencia menores al 3% y mayores al 97%** y además está contenido dentro de los valores que tendrá el experimento (e.g, no más de 35 reed frogs)
 
 ```{r}
+#| echo: FALSE
+#| warning: FALSE
+#| message: FALSE
+
 kable(df_apriori |> 
   mutate(menor_03 = survival_rate < 1/35, mayor_97 = survival_rate > 34/35) |> 
   summarise(menor_03 = mean(menor_03), mayor_97 = mean(mayor_97)))
 ```
 
-## Chequeos posterior
+#### Chequeos posterior
 
 ```{stan output.var="posterior"}
 data {
@@ -1311,9 +1398,13 @@ fit_posterior <- rstan::sampling(posterior,
 
 Para considerar que estamos haciendo un modelo que aprenda de diferentes grupos las validaciones de la posterior las realizaremos por tamaño de tanque.
 
-No hay un desajuste tan claro en el modelo para ninguno de los casos. Tal vez viéndolo a total podríamos regresar al análisis conceptual y determinar si hay algo en el proceso generador de datos que no estamos considerando. 
+No hay un desajuste tan claro en el modelo para ninguno de los casos. Tal vez viéndolo a total podríamos regresar al análisis conceptual y determinar si hay algo en el proceso generador de datos que no estamos considerando.
 
 ```{r}
+#| echo: FALSE
+#| warning: FALSE
+#| message: FALSE
+
 sims_tbl  <- as.data.frame(fit_posterior, pars = c('S_rep'))
 
 obs_post_tbl <-  sims_tbl |> 
@@ -1336,6 +1427,10 @@ obs_post_tbl <-
 **TODOS**
 
 ```{r}
+#| echo: FALSE
+#| warning: FALSE
+#| message: FALSE
+
 ggplot(obs_post_tbl |> 
          filter(draw <= 10) |>
          select(draw, surv_rate) |>
@@ -1351,6 +1446,10 @@ ggplot(obs_post_tbl |>
 **Primer tamaño**
 
 ```{r}
+#| echo: FALSE
+#| warning: FALSE
+#| message: FALSE
+
 ggplot(obs_post_tbl |> 
          filter(draw <= 10, density == 10) |>
          select(draw, surv_rate) |>
@@ -1365,6 +1464,10 @@ ggplot(obs_post_tbl |>
 ```
 
 ```{r}
+#| echo: FALSE
+#| warning: FALSE
+#| message: FALSE
+
 ggplot(obs_post_tbl |> 
          filter(draw <= 10, density == 25) |>
          select(draw, surv_rate) |>
@@ -1379,6 +1482,10 @@ ggplot(obs_post_tbl |>
 ```
 
 ```{r}
+#| echo: FALSE
+#| warning: FALSE
+#| message: FALSE
+
 ggplot(obs_post_tbl |> 
          filter(draw <= 10, density == 35) |>
          select(draw, surv_rate) |>
@@ -1390,18 +1497,4 @@ ggplot(obs_post_tbl |>
        aes(x = surv_rate)) +
   geom_histogram(bins = 10) +
   facet_wrap(~draw) + theme_bw()
-```
-
-
-## Anexos {#sec-anexos}
-
-### Rethinking y sus datos {#sec-rethinking-y-sus-datos}
-
-Para instalar la librería de *rethinking*, se pueden seguir las instrucciones del repositorio de McElreath, disponible en este [link](https://github.com/rmcelreath/rethinking "Repositorio de rethinking").
-
-Una vez instalada la librería y sus dependencias, los datos de *reedfrogs* se pueden obtener corriendo el siguiente código
-
-```{r anexo1_cargarDatos, eval=FALSE}
-library(rethinking)
-data(reedfrogs)
 ```
